@@ -6,6 +6,15 @@ import "net"
 import "fmt"
 
 
+type ElevatorState int
+
+const (
+    Idle ElevatorState = iota
+    MovingUp
+    MovingDown
+    DoorOpen
+)
+
 
 const _pollRate = 20 * time.Millisecond
 
