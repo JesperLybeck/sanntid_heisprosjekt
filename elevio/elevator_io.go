@@ -6,9 +6,19 @@ import (
 	"sync"
 	"time"
 )
+import (
+	"fmt"
+	"net"
+	"sync"
+	"time"
+)
 
 const _pollRate = 20 * time.Millisecond
 
+var _initialized bool = false
+var _numFloors int = 4
+var _mtx sync.Mutex
+var _conn net.Conn
 var _initialized bool = false
 var _numFloors int = 4
 var _mtx sync.Mutex
@@ -164,13 +174,22 @@ func read(in [4]byte) [4]byte {
 	_mtx.Lock()
 	defer _mtx.Unlock()
 
+
 	_, err := _conn.Write(in[:])
+	if err != nil {
+		panic("Lost connection to Elevator Server")
+	}
+
 	if err != nil {
 		panic("Lost connection to Elevator Server")
 	}
 
 	var out [4]byte
 	_, err = _conn.Read(out[:])
+	if err != nil {
+		panic("Lost connection to Elevator Server")
+	}
+
 	if err != nil {
 		panic("Lost connection to Elevator Server")
 	}
@@ -182,7 +201,11 @@ func write(in [4]byte) {
 	_mtx.Lock()
 	defer _mtx.Unlock()
 
+
 	_, err := _conn.Write(in[:])
+	if err != nil {
+		panic("Lost connection to Elevator Server")
+	}
 	if err != nil {
 		panic("Lost connection to Elevator Server")
 	}
