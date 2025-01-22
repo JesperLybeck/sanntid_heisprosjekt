@@ -1,64 +1,37 @@
 package main
 
 import "Driver-go/elevio"
-import "Driver-go/execute"
-
 import "fmt"
+
+
+
 
 func main(){
 
     const (
-        numFloors = 4
+        num_floors = 4
     )
 
     type events struct { 
         order_complete chan int
-        new_order chan elevio.ButtonEvent 
+        new_order chan elevio.button_event 
         arrived_at_floor chan int 
     }
 
     type states struct {
         idle chan int
-        moving chan elevio.MotorDirection
+        moving chan elevio.motor_direction
         door_open chan bool
 
     }
 
-    go elevio.PollButtons(drv_buttons)
-    go elevio.PollFloorSensor(drv_floors)
-    go elevio.PollObstructionSwitch(drv_obstr)
-    go elevio.PollStopButton(drv_stop)
+    //go elevio.PollButtons(drv_buttons)
+    //go elevio.PollFloorSensor(drv_floors)
+    //go elevio.PollObstructionSwitch(drv_obstr)
+    //go elevio.PollStopButton(drv_stop)
 
-
+    print("Hello")
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

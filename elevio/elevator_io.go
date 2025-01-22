@@ -6,12 +6,7 @@ import (
 	"sync"
 	"time"
 )
-import (
-	"fmt"
-	"net"
-	"sync"
-	"time"
-)
+
 
 const _pollRate = 20 * time.Millisecond
 
@@ -19,10 +14,7 @@ var _initialized bool = false
 var _numFloors int = 4
 var _mtx sync.Mutex
 var _conn net.Conn
-var _initialized bool = false
-var _numFloors int = 4
-var _mtx sync.Mutex
-var _conn net.Conn
+
 
 type motor_direction int
 

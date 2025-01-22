@@ -3,74 +3,74 @@ package elevio
 
 import (
 
-	"time"
 	"fmt"
+    "time"
 
 )
 
 var ( 
-	Elevator 	elevator
-	elev_output_device 		elevator_input_device
+	Elevator elevator
+	output_device elev_output_device 		
 )
 
 func Init() {
-	Elevator = elevator_uninitialized()
+	Elevator = Elevator_uninitialized()
 
 	conLoad("elevator.con",
-	conVal("doorOpenDuration_s", &Elevator.Config.DoorOpenDuration_s, "%lf"),
-	conEnum("clearRequestVariant", &Elevator.Config.ClearRequestVariant,
+	conVal("doorOpenDuration_s", &Elevator.config.door_open_duration, "lf"),
+	conEnum("clearRequestVariant", &Elevator.config.clear_requests_variant,
 		conMatch(CV_All),
 		conMatch(CV_InDirn),
 	),
 )
-	output_device = elev_output_device()
+	output_device = GetOutputDevice()
 }
 
 
 func set_all_lights(Elevator elevator) {
-    for floor := 0; floor < elevio.NumFloors(); floor++ {
-        for btn := 0; btn < elevio.NumButtons(); btn++ {
-            output_device.request_button_light(floor, btn, Elevator.Requests[floor][btn])
+    for floor := 0; floor < N_FLOORS; floor++ {
+        for btn := 0; btn < N_BUTTONS; btn++ {
+            output_device.request_button_light(button(Elevator.floor), btn, Elevator.requests[floor][btn])
         }
     }
 }
 
 func Fsm_on_init_between_floors() {
-    output_device.motor_direction(MD_Down)
-    Elevator.direction = MD_Down
+    output_device.motor_direction(direction_down)
+    Elevator.direction = direction_down
     Elevator.behaviour = eb_moving
 }
 
-func On_request_button_press(btnFloor int, btnType ButtonType) {
+func On_request_button_press(btnFloor int, btnType button) {
     fmt.Printf("\n\n%s(%d, %s)\n", "OnRequestButtonPress", btnFloor, button_to_string(btnType))
     
 
-    switch Elevator.Behaviour {
-    case Elevator.eb_door_open:
-        if requests_should_clear_immediately(Elevator, btnFloor, btnType) {
-            Timer_start(Elevator.config.door_open_duration)
+    switch Elevator.behaviour {
+    case eb_door_open:
+        if Requests_should_clear_immediately(Elevator, btnFloor, btnType) {
+            Timer_start(time.Duration(Elevator.config.door_open_duration))
         } else {
-            Elevator.requests[btnFloor][btnType] = 1
+            Elevator.requests[btnFloor][btnType] = true
         }
-    case Elevator.eb_moving:
-        Elevator.requests[btnFloor][btnType] = 1
-    case Elevator.eb_idle:
-        Elevator.requests[btnFloor][btnType] = 1
-        pair := requests_choose_directions(elevator)
-        Elevator.Dirn = pair.Dirn
-        Elevator.Behaviour = pair.Behaviour
-        switch pair.Behaviour {
-        case Elevator.EB_DoorOpen:
-            output_device.door_light(1)
-            Timer_start(Elevator.config.door_open_duration)
-            Elevator = requests_clear_at_current_floor(elevator)
-        case Elevator.eb_moving:
-            output_device.MotorDirection(Elevator.direction)
-        case Elevator.eb_idle:
+    case eb_moving:
+        Elevator.requests[btnFloor][btnType] = true
+    case eb_idle:
+        Elevator.requests[btnFloor][btnType] = true
+        pair := Request_choose_directions(Elevator)
+        Elevator.direction = pair.direction
+        Elevator.behaviour = pair.behaviour
+        switch pair.behaviour {
+        case eb_door_open:
+            output_device.door_light(true)
+            Timer_start(time.Duration(Elevator.config.door_open_duration))
+            Elevator = Requests_clear_at_current_floor(Elevator)
+        case eb_moving:
+            output_device.motor_direction(Elevator.direction)
+        case eb_idle:
         }
     }
 
-	set_all_lights(elevator)
+	set_all_lights(Elevator)
 
     fmt.Printf("\nNew state:\n")
 }
@@ -83,14 +83,14 @@ func On_floor_arrival(newFloor int) {
     output_device.floor_indicator(Elevator.floor)
 
     switch Elevator.behaviour {
-    case Elevator.eb_moving:
-        if requests_should_stop(elevator) {
-            output_device.motor_direction(MD_Stop)
-            output_device.door_light(1)
-            elevator = requests_clear_at_current_floor(elevator)
-            Timer_start(elevator.config.door_open_duration)
-            set_all_lights(elevator)
-            Elevator.behaviour = Elevator.eb_door_open
+    case eb_moving:
+        if Requests_should_stop(Elevator) {
+            output_device.motor_direction(direction_stop)
+            output_device.door_light(true)
+            Elevator = Requests_clear_at_current_floor(Elevator)
+            Timer_start(time.Duration(Elevator.config.door_open_duration))
+            set_all_lights(Elevator)
+            Elevator.behaviour = eb_door_open
         }
     default:
     }
@@ -103,24 +103,14 @@ func On_floor_arrival(newFloor int) {
 func On_door_timeout() {
     fmt.Printf("\n\n%s()\n", "OnDoorTimeout")
 
-    switch Elevator.Behaviour {
-    case Elevator.eb_door_open:
-        pair := requests_choose_direction(elevator)
-        Elevator.direction = pair.direction
-        Elevator.behaviour = pair.behaviour
-
-        switch Elevator.behaviour {
-        case Elevator.eb_door_open:
-            Timer_start(Elevator.config.door_open_duration)
-            elevator = requests_clear_at_current_floor(elevator)
-            set_all_lights(elevator)
-        case Elevator.eb_moving, Elevator.eb_idle:
-            output_device.door_light(0)
-            output_device.MotorDirection(Elevator.direction)
+    switch Elevator.behaviour {
+        case eb_door_open:
+            Timer_start(time.Duration(Elevator.config.door_open_duration))
+            Elevator = Requests_clear_at_current_floor(Elevator)
+            set_all_lights(Elevator)
+        case eb_moving, eb_idle:
+            output_device.door_light(false)
+            output_device.motor_direction(Elevator.direction)
         }
-    default:
+        fmt.Printf("\nNew state:\n")
     }
-
-    fmt.Printf("\nNew state:\n")
-
-}

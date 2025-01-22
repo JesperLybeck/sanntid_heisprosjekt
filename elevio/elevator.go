@@ -1,4 +1,4 @@
-package elevator
+package elevio
 
 type elevator_behaviour int
 
@@ -22,7 +22,7 @@ type config struct {
 
 type elevator struct {
 	floor int
-	direction direction
+	direction motor_direction
 	requests [N_FLOORS][N_BUTTONS]bool
 	behaviour elevator_behaviour
 	config config
@@ -31,7 +31,7 @@ type elevator struct {
 func Elevator_uninitialized() elevator {
 	return elevator{
 		floor: -1,
-		direction: d_stop,
+		direction: direction_stop,
 		behaviour: eb_idle,
 		config: config{
             clear_requests_variant: cv_all,
