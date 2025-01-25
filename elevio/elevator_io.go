@@ -17,9 +17,9 @@ var _conn net.Conn
 type motor_direction int
 
 const (
-	direction_up   motor_direction = 1
-	direction_down                 = -1
-	direction_stop                 = 0
+	Direction_up   motor_direction = 1
+	Direction_down                 = -1
+	Direction_stop                 = 0
 )
 
 type button int
@@ -30,23 +30,23 @@ const (
 	button_cab              = 2
 )
 
-type button_event struct {
+type Button_event struct {
 	floor  int
 	button button
 }
-type elev_input_device struct {
-	floor_sensor   func() int
-	request_button func(button, int) bool
-	stop_button    func() bool
-	obstruction    func() bool
+type Elev_input_device struct {
+	Floor_sensor   func() int
+	Request_button func(button, int) bool
+	Stop_button    func() bool
+	Obstruction    func() bool
 }
 
-type elev_output_device struct {
-	floor_indicator      func(int)
-	request_button_light func(button, int, bool)
-	door_light           func(bool)
-	stop_button_light    func(bool)
-	motor_direction      func(motor_direction)
+type Elev_output_device struct {
+	Floor_indicator      func(int)
+	Request_button_light func(button, int, bool)
+	Door_light           func(bool)
+	Stop_button_light    func(bool)
+	Motor_direction      func(motor_direction)
 }
 
 func Init(addr string, numFloors int) {
@@ -84,7 +84,7 @@ func Set_stop_lamp(value bool) {
 	write([4]byte{5, toByte(value), 0, 0})
 }
 
-func Poll_buttons(receiver chan<- button_event) {
+func Poll_buttons(receiver chan<- Button_event) {
 	prev := make([][3]bool, _numFloors)
 	for {
 		time.Sleep(_pollRate)
@@ -92,7 +92,7 @@ func Poll_buttons(receiver chan<- button_event) {
 			for b := button(0); b < 3; b++ {
 				v := Get_button(b, f)
 				if v != prev[f][b] && v != false {
-					receiver <- button_event{f, button(b)}
+					receiver <- Button_event{f, button(b)}
 				}
 				prev[f][b] = v
 			}
@@ -169,8 +169,16 @@ func read(in [4]byte) [4]byte {
 		panic("Lost connection to Elevator Server")
 	}
 
+	if err != nil {
+		panic("Lost connection to Elevator Server")
+	}
+
 	var out [4]byte
 	_, err = _conn.Read(out[:])
+	if err != nil {
+		panic("Lost connection to Elevator Server")
+	}
+
 	if err != nil {
 		panic("Lost connection to Elevator Server")
 	}
@@ -183,6 +191,9 @@ func write(in [4]byte) {
 	defer _mtx.Unlock()
 
 	_, err := _conn.Write(in[:])
+	if err != nil {
+		panic("Lost connection to Elevator Server")
+	}
 	if err != nil {
 		panic("Lost connection to Elevator Server")
 	}
@@ -207,11 +218,11 @@ func toBool(a byte) bool {
 // ElevioDirnToString converts a Dirn to its string representation
 func Direction_to_string(d motor_direction) string {
 	switch d {
-	case direction_up:
+	case Direction_up:
 		return "Direction_Up"
-	case direction_down:
+	case Direction_down:
 		return "Direction_Down"
-	case direction_stop:
+	case Direction_stop:
 		return "Direction_Stop"
 	default:
 		return "D_UNDEFINED"
@@ -232,21 +243,21 @@ func button_to_string(b button) string {
 	}
 }
 
-func GetInputDevice() elev_input_device {
-	return elev_input_device{
-		floor_sensor:   Get_floor,
-		request_button: Get_button,
-		stop_button:    Get_stop,
-		obstruction:    Get_obstruction,
+func GetInputDevice() Elev_input_device {
+	return Elev_input_device{
+		Floor_sensor:   Get_floor,
+		Request_button: Get_button,
+		Stop_button:    Get_stop,
+		Obstruction:    Get_obstruction,
 	}
 }
 
-func GetOutputDevice() elev_output_device {
-	return elev_output_device{
-		floor_indicator:      Set_floor_indicator,
-		request_button_light: Set_button_lamp,
-		door_light:           Set_door_open_lamp,
-		stop_button_light:    Set_stop_lamp,
-		motor_direction:      Set_motor_direction,
+func GetOutputDevice() Elev_output_device {
+	return Elev_output_device{
+		Floor_indicator:      Set_floor_indicator,
+		Request_button_light: Set_button_lamp,
+		Door_light:           Set_door_open_lamp,
+		Stop_button_light:    Set_stop_lamp,
+		Motor_direction:      Set_motor_direction,
 	}
 }
