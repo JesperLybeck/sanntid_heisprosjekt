@@ -75,12 +75,9 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		nextOutput.Door = true
 		return ElevatorDescision{nextState, nextOutput}
 	}
-	fmt.Println("orders", storedInput.PressedButtons)
-	fmt.Println("motor direction", storedOutput.MotorDirection)
-	fmt.Println("floor", event)
 
 	if (storedInput.PressedButtons[event][0] && storedOutput.MotorDirection == elevio.MD_Up) || (storedInput.PressedButtons[event][1] && storedOutput.MotorDirection == elevio.MD_Down) || (storedInput.PressedButtons[event][2]) {
-		print("her")
+		fmt.Println("stopping at floor", event)
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
@@ -120,7 +117,7 @@ func HandleNewOrder(state ElevatorState, event elevio.ButtonEvent, storedInput E
 		}
 		return ElevatorDescision{nextState, nextOutput}
 	} else {
-		nextOutput.ButtonLights[event.Floor][event.Button] = true
+		nextOutput.ButtonLights = storedInput.PressedButtons
 		nextOutput.MotorDirection = storedOutput.MotorDirection
 		fmt.Println(storedOutput.MotorDirection)
 		return ElevatorDescision{state, nextOutput}
@@ -140,19 +137,35 @@ func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) E
 	if !unservedOrders {
 		nextOutput.Door = false
 		nextState = Idle
-		
+
 	} else {
-		anyOrdersAbove := RequestsAbove(storedInput)
-		fmt.Println(anyOrdersAbove)
-		anyOrdersBelow := RequestsBelow(storedInput)
-		fmt.Println(anyOrdersBelow)
-		fmt.Println(storedOutput.MotorDirection)
-		if storedOutput.MotorDirection == elevio.MD_Down && anyOrdersBelow {
-			nextOutput.MotorDirection = elevio.MD_Down
-			nextState = MovingBetweenFloors
-		} else if storedOutput.MotorDirection == elevio.MD_Up && anyOrdersAbove {
-			nextOutput.MotorDirection = elevio.MD_Up
-			nextState = MovingBetweenFloors
+
+		switch storedOutput.MotorDirection {
+		case elevio.MD_Stop:
+			if RequestsAbove(storedInput) {
+				nextOutput.MotorDirection = elevio.MD_Up
+			} else if RequestsBelow(storedInput) {
+				nextOutput.MotorDirection = elevio.MD_Down
+			} else {
+				nextOutput.MotorDirection = elevio.MD_Stop
+			}
+		case elevio.MD_Up:
+			if RequestsAbove(storedInput) {
+				nextOutput.MotorDirection = elevio.MD_Up
+			} else if RequestsBelow(storedInput) {
+				nextOutput.MotorDirection = elevio.MD_Down
+			} else {
+				nextOutput.MotorDirection = elevio.MD_Stop
+			}
+
+		case elevio.MD_Down:
+			if RequestsBelow(storedInput) {
+				nextOutput.MotorDirection = elevio.MD_Down
+			} else if RequestsAbove(storedInput) {
+				nextOutput.MotorDirection = elevio.MD_Up
+			} else {
+				nextOutput.MotorDirection = elevio.MD_Stop
+			}
 		}
 	}
 	nextOutput.ButtonLights = storedOutput.ButtonLights
