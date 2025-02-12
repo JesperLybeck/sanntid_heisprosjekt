@@ -1,29 +1,112 @@
 package main
 
-import "Driver-go/elevio"
+import (
+	"Sanntid/elevio"
+	"Sanntid/fsm"
+	"fmt"
+	"time"
+)
+
+func startDoorTimer(doorTimeout chan<- bool) {
+	time.Sleep(3 * time.Second)
+	doorTimeout <- true
+}
 
 func main() {
-	println("hei")
-	elevio.Init("localhost:15657", elevio.NUMFLOORS)
-	var elevator_1 elevio.Elevator_state_machine = elevio.Create_elevator_state_machine(1)
-	//var orders = []Elevator_order{}
-	elevio.Initialize_elevator(&elevator_1)
-	button_events_channel := make(chan elevio.Button_event)
-	
-	
-	go elevio.Run_elevator(&elevator_1)
-	go elevio.Poll_buttons(button_events_channel)
-	go elevio.Poll_floor_sensor(elevator_1.Event_channels.Floor_reached)
 
-	//hvis det hadde vært gjort på kabinett, så legges det inn i egen kø, dersom det kommer i etasjepanel så skal det bli sendt om man er IDel
-	
+	numFloors := 4
+	elevio.Init("localhost:15657", numFloors)
+
+	println("Initializing elevator")
+	for elevio.GetFloor() == -1 {
+		elevio.SetMotorDirection(elevio.MD_Up)
+	}
+
+	for j := 0; j < 4; j++ {
+		elevio.SetButtonLamp(elevio.BT_HallUp, j, false)
+		elevio.SetButtonLamp(elevio.BT_HallDown, j, false)
+		elevio.SetButtonLamp(elevio.BT_Cab, j, false)
+	}
+
+	elevio.SetMotorDirection(elevio.MD_Stop)
+	println("start floor reached")
+
+	var state fsm.ElevatorState = fsm.Idle
+	var storedInput fsm.ElevatorInput
+	storedInput.PrevFloor = elevio.GetFloor()
+
+	var storedOutput fsm.ElevatorOutput
+	storedOutput.MotorDirection = elevio.MD_Stop
+
+	newOrder := make(chan elevio.ButtonEvent)
+	floorReached := make(chan int)
+	doorTimeout := make(chan bool)
+	time.Sleep(1 * time.Second)
+
+	go elevio.PollButtons(newOrder)
+	go elevio.PollFloorSensor(floorReached)
 
 	for {
 		select {
-		case button_event := <-button_events_channel:
-			elevio.Handle_button_event(button_event, &elevator_1.Order_queue) //knappen blir lagt inn i heiskøen 
+		case a := <-newOrder:
+			fmt.Println(state)
+			elevio.SetButtonLamp(a.Button, a.Floor, true)
+			storedInput.PressedButtons[a.Floor][a.Button] = true
+			switch state {
+			case fsm.Idle:
+
+				decision := fsm.HandleNewOrder(state, a, storedInput, storedOutput)
+				state = decision.NextState
+				storedOutput = decision.ElevatorOutput
+				elevio.SetMotorDirection(storedOutput.MotorDirection)
+				print("new order")
+
+			case fsm.MovingBetweenFloors:
+				decision := fsm.HandleNewOrder(state, a, storedInput, storedOutput)
+				state = decision.NextState
+				storedOutput = decision.ElevatorOutput
+
+			case fsm.DoorOpen:
+
+			case fsm.MovingPassingFloor:
+
+			}
+		case a := <-floorReached:
+			fmt.Println("Floor reached")
+			elevio.SetFloorIndicator(a)
+			prevDirection := storedOutput.MotorDirection
+			decision := fsm.HandleFloorReached(a, storedInput, storedOutput)
+			state = decision.NextState
+
+			for i := 0; i < 3; i++ {
+				for j := 0; j < 4; j++ {
+					if decision.ElevatorOutput.ButtonLights[j][i] {
+						elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
+					} else {
+						elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
+					}
+				}
+			}
+
+			if state == fsm.DoorOpen {
+				go startDoorTimer(doorTimeout)
+				elevio.SetDoorOpenLamp(true)
+			}
+			storedOutput.MotorDirection = prevDirection
+			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
+			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
+
+		case <-doorTimeout:
+			fmt.Println(storedInput.PressedButtons)
+			elevio.SetDoorOpenLamp(false)
+			state = fsm.Idle
+			decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
+			state = decision.NextState
+			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
+			elevio.SetDoorOpenLamp(false)
+			println("door sequece done")
+			fmt.Println(decision.ElevatorOutput.ButtonLights)
+
 		}
 	}
-
-	
 }
