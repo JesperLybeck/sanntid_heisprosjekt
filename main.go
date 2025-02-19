@@ -152,7 +152,6 @@ func main() {
 			if state == fsm.DoorOpen {
 				go startDoorTimer(doorTimeout)
 				elevio.SetDoorOpenLamp(true)
-
 			}
 			storedOutput.MotorDirection = prevDirection
 			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
@@ -161,14 +160,17 @@ func main() {
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 
 		case <-doorTimeout:
-
+			storedInput.PrevFloor = elevio.GetFloor()
 			elevio.SetDoorOpenLamp(false)
-			state = fsm.Idle
 			decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
 			state = decision.NextState
+			if state == fsm.DoorOpen {
+				go startDoorTimer(doorTimeout)
+				elevio.SetDoorOpenLamp(true)
+			}
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 			storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
-			elevio.SetDoorOpenLamp(false)
+			
 			println("door sequece done")
 
 		}
