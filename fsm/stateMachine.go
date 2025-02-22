@@ -95,14 +95,30 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 	caseUp := storedOutput.MotorDirection == elevio.MD_Up && (storedOutput.ButtonLights[event][0] || storedOutput.ButtonLights[event][2] || !RequestsAbove(storedInput))
 
 	// isCabCall || isOrderInDirectionUp || isOrderInDirectionDown || isOrderFirstFloor || isOrderTopFloor || isOnlyOrder {
-	if caseDown || caseUp {
+	if caseDown  {
 		fmt.Println("stopping at floor", event)
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
 		nextOutput.ButtonLights = storedInput.PressedButtons
-		nextOutput.ButtonLights[event][0] = false
+		if !RequestsBelow(storedInput) {
+			nextOutput.ButtonLights[event][0] = false
+		}
 		nextOutput.ButtonLights[event][1] = false
+		nextOutput.ButtonLights[event][2] = false
+		storedInput.PressedButtons = storedOutput.ButtonLights
+		return ElevatorDescision{nextState, nextOutput}
+	}
+	if  caseUp {
+		fmt.Println("stopping at floor", event)
+		nextState = DoorOpen
+		nextOutput.MotorDirection = elevio.MD_Stop
+		nextOutput.Door = true
+		nextOutput.ButtonLights = storedInput.PressedButtons
+		if !RequestsAbove(storedInput) {
+			nextOutput.ButtonLights[event][1] = false
+		}
+		nextOutput.ButtonLights[event][0] = false
 		nextOutput.ButtonLights[event][2] = false
 		storedInput.PressedButtons = storedOutput.ButtonLights
 		return ElevatorDescision{nextState, nextOutput}
@@ -199,7 +215,7 @@ func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) E
 				nextOutput.Door = true
 				nextOutput.MotorDirection = elevio.MD_Stop
 			} else if RequestsBelow(storedInput) {
-				fmt.Println("request under, moving down", storedInput.PressedButtons[storedInput.PrevFloor][0],storedInput.PrevFloor)
+				fmt.Println("request under, moving down", storedInput.PressedButtons[storedInput.PrevFloor][0], storedInput.PrevFloor)
 				fmt.Println("request under, pressed", storedInput.PressedButtons)
 				nextOutput.MotorDirection = elevio.MD_Down
 				nextState = MovingBetweenFloors

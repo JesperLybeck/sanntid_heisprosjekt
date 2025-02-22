@@ -3,9 +3,15 @@ package main
 import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
+	"Network-go/network/bcast"
+	//"Network-go/network/localip"
+	//"Network-go/network/peers"
 	"fmt"
+	"os/exec"
 	"time"
 )
+
+
 
 func testHandleFloorReached() {
 	event := 0
@@ -46,7 +52,9 @@ func main() {
 	testHandleFloorReached()
 	numFloors := 4
 	elevio.Init("localhost:15657", numFloors)
-
+	cmd := exec.Command("gnome-terminal", "-x", "go", "run", "primary/boss.go")
+	cmd.Start()
+	
 	println("Initializing elevator")
 	for elevio.GetFloor() == -1 {
 		elevio.SetMotorDirection(elevio.MD_Up)
@@ -72,15 +80,18 @@ func main() {
 	newOrder := make(chan elevio.ButtonEvent)
 	floorReached := make(chan int)
 	doorTimeout := make(chan bool)
+	transCh := make(chan elevio.ButtonEvent)
 	time.Sleep(1 * time.Second)
+
 
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
+	go bcast.Transmitter(12055, transCh)
 
 	for {
 		select {
 		case a := <-newOrder:
-
+			transCh <- a
 			fmt.Println("3?", state)
 			elevio.SetButtonLamp(a.Button, a.Floor, true)
 			storedInput.PressedButtons[a.Floor][a.Button] = true
