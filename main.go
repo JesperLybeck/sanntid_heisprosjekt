@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+type order struct {
+	Button elevio.ButtonEvent
+	Id string
+}
 
 
 func testHandleFloorReached() {
@@ -80,18 +84,26 @@ func main() {
 	newOrder := make(chan elevio.ButtonEvent)
 	floorReached := make(chan int)
 	doorTimeout := make(chan bool)
-	transCh := make(chan elevio.ButtonEvent)
+	TXOrderCh := make(chan order)
+	RXOrderCh := make(chan order)
+
 	time.Sleep(1 * time.Second)
 
 
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
-	go bcast.Transmitter(12055, transCh)
+	go bcast.Transmitter(12070, TXOrderCh)
+	go bcast.Receiver(12070, RXOrderCh)
+
 
 	for {
 		select {
 		case a := <-newOrder:
-			transCh <- a
+			b := order{a, "0"}
+			fmt.Println(b)
+			TXOrderCh <- b
+		case b := <-RXOrderCh:
+			a := b.Button
 			fmt.Println("3?", state)
 			elevio.SetButtonLamp(a.Button, a.Floor, true)
 			storedInput.PressedButtons[a.Floor][a.Button] = true
