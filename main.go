@@ -6,20 +6,12 @@ import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
-	
-
 
 	//"Network-go/network/localip"
 	//"Network-go/network/peers"
 	"fmt"
 	"time"
 )
-
-
-type order struct {
-	Button elevio.ButtonEvent
-	Id     string
-}
 
 func startDoorTimer(doorTimeout chan<- bool) {
 
@@ -44,7 +36,8 @@ func main() {
 		elevio.SetMotorDirection(elevio.MD_Up)
 	}
 
-	pba.PeerUpdates()
+	pba.DecideRole(ID)
+	go pba.CheckRoles(ID)
 	go pba.Primary(ID)
 	go pba.Backup(ID)
 
@@ -68,8 +61,8 @@ func main() {
 	newOrder := make(chan elevio.ButtonEvent)
 	floorReached := make(chan int)
 	doorTimeout := make(chan bool)
-	TXOrderCh := make(chan order)
-	RXOrderCh := make(chan order)
+	TXOrderCh := make(chan fsm.Order)
+	RXOrderCh := make(chan fsm.Order)
 
 	time.Sleep(1 * time.Second)
 
@@ -80,18 +73,17 @@ func main() {
 
 	for {
 		select {
+		case a := <-RXOrderCh:
+			if a.Role == "backup" && a.TargetID == ID {
+				fsm.BackupID = ID
+			}
 
 		case a := <-newOrder:
-			b := order{a, "0"}
-			fmt.Println(b)
-			TXOrderCh <- b
-		case b := <-RXOrderCh:
 
-			a := b.Button
-			fmt.Println("3?", state)
 			elevio.SetButtonLamp(a.Button, a.Floor, true)
 			storedInput.PressedButtons[a.Floor][a.Button] = true
 			storedOutput.ButtonLights = storedInput.PressedButtons
+
 			switch state {
 			case fsm.Idle:
 

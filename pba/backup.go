@@ -10,24 +10,25 @@ import (
 var LatestStatusFromPrimary fsm.Status
 
 func Backup(ID string) {
+	for {
+		if ID == fsm.BackupID {
 
-	if ID == fsm.BackupID {
+			timeout := time.After(3 * time.Second) // Set timeout duration
+			primaryStatusRX := make(chan fsm.Status)
+			go bcast.Receiver(13055, primaryStatusRX)
 
-		timeout := time.After(3 * time.Second) // Set timeout duration
-		primaryStatusRX := make(chan fsm.Status)
-		go bcast.Receiver(12055, primaryStatusRX)
+			for {
+				select {
+				case p := <-primaryStatusRX:
+					fmt.Println("Primary status received", p)
+					timeout = time.After(5 * time.Second)
 
-		for {
-			select {
-			case p := <-primaryStatusRX:
-				fmt.Println("Primary status received", p)
-				timeout = time.After(5 * time.Second)
+				case <-timeout:
+					println("Primary status lost")
 
-			case <-timeout:
-				println("Primary status lost")
+				}
 
 			}
-
 		}
 	}
 }
