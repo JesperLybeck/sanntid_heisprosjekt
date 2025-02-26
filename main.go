@@ -1,48 +1,24 @@
 package main
 
 import (
+	"Network-go/network/bcast"
+	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
-	"Network-go/network/bcast"
+	"Sanntid/pba"
+	
+
+
 	//"Network-go/network/localip"
 	//"Network-go/network/peers"
 	"fmt"
-	"os/exec"
 	"time"
 )
 
+
 type order struct {
 	Button elevio.ButtonEvent
-	Id string
-}
-
-
-func testHandleFloorReached() {
-	event := 0
-	storedInput := fsm.ElevatorInput{
-		PressedButtons: [4][3]bool{
-			{false, false, false},
-			{false, false, false},
-			{true, false, false}, // Simulerer en knappetrykk på etasje 2
-			{false, false, false},
-		},
-		PrevFloor: 1,
-	}
-	storedOutput := fsm.ElevatorOutput{
-		MotorDirection: elevio.MD_Down,
-		Door:           false,
-		ButtonLights: [4][3]bool{
-			{false, false, false},
-			{false, false, false},
-			{false, false, false}, // Simulerer en knappetrykk på etasje 2
-			{true, false, false},
-		},
-	}
-
-	decision := fsm.HandleFloorReached(event, storedInput, storedOutput)
-
-	fmt.Println("Motor Direction:", decision.ElevatorOutput.MotorDirection)
-
+	Id     string
 }
 
 func startDoorTimer(doorTimeout chan<- bool) {
@@ -53,16 +29,24 @@ func startDoorTimer(doorTimeout chan<- bool) {
 }
 
 func main() {
-	testHandleFloorReached()
+
+	var ID = time.Now().Format("20060102150405")
+	peerTX := make(chan bool)
+	//AliveTicker := time.NewTicker(2 * time.Second)
+
+	go peers.Transmitter(12055, ID, peerTX)
+
 	numFloors := 4
 	elevio.Init("localhost:15657", numFloors)
-	cmd := exec.Command("gnome-terminal", "-x", "go", "run", "primary/boss.go")
-	cmd.Start()
-	
+
 	println("Initializing elevator")
 	for elevio.GetFloor() == -1 {
 		elevio.SetMotorDirection(elevio.MD_Up)
 	}
+
+	pba.PeerUpdates()
+	go pba.Primary(ID)
+	go pba.Backup(ID)
 
 	for j := 0; j < 4; j++ {
 		elevio.SetButtonLamp(elevio.BT_HallUp, j, false)
@@ -89,20 +73,20 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
 	go bcast.Transmitter(12070, TXOrderCh)
 	go bcast.Receiver(12070, RXOrderCh)
 
-
 	for {
 		select {
+
 		case a := <-newOrder:
 			b := order{a, "0"}
 			fmt.Println(b)
 			TXOrderCh <- b
 		case b := <-RXOrderCh:
+
 			a := b.Button
 			fmt.Println("3?", state)
 			elevio.SetButtonLamp(a.Button, a.Floor, true)
@@ -193,7 +177,7 @@ func main() {
 			}
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 			storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
-			
+
 			println("door sequece done")
 
 		}
