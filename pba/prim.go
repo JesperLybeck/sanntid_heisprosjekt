@@ -54,6 +54,7 @@ func Primary(ID string) {
 					}
 
 				case <-ticker.C:
+					fmt.Println("sending primary status version: ", fsm.Version)
 
 					statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: [4][3]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}, Version: fsm.Version}
 

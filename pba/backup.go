@@ -28,6 +28,7 @@ func Backup(ID string) {
 					}
 					timeout = time.After(3 * time.Second)
 				} else if p.Version > fsm.Version {
+					fmt.Println("Primary version higher. accepting new primary")
 					fsm.Version = p.Version
 					fsm.PrimaryID = p.TransmitterID
 					timeout = time.After(3 * time.Second)
@@ -53,6 +54,5 @@ func Backup(ID string) {
 			}
 		}
 	}
-		
-}
 
+}
