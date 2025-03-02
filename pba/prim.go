@@ -42,9 +42,12 @@ func Primary(ID string) {
 					fmt.Println("Lost", p.Lost)
 					for i := 0; i < len(p.Lost); i++ {
 						if p.Lost[i]==fsm.BackupID{
+							println("Backup lost")
 							for j := 0; j < len(p.Peers); j++ {
 								if p.Peers[j]!= fsm.PrimaryID{
 									fsm.BackupID = p.Peers[j]
+								} else {
+									fsm.BackupID = ""
 								}
 							}
 						}

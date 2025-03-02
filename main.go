@@ -6,6 +6,7 @@ import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
+	"flag"
 
 	//"Network-go/network/localip"
 	//"Network-go/network/peers"
@@ -20,12 +21,13 @@ func startDoorTimer(doorTimeout chan<- bool) {
 	})
 }
 
-var StartingAsPrimary bool = false
+var StartingAsPrimary = flag.Bool("primary", false, "Start as primary")
 
 func main() {
+	flag.Parse()
 
 	var ID = time.Now().Format("20060102150405")
-	if StartingAsPrimary {
+	if *StartingAsPrimary {
 		fsm.PrimaryID = ID
 	}
 
