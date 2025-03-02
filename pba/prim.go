@@ -36,7 +36,7 @@ func Primary(ID string) {
 							}
 						}
 					}
-					fsm.LostElevators = append(fsm.LostElevators, p.Lost[0])
+
 					fmt.Println("Peer update", p.Peers)
 					fmt.Println("New", p.New)
 					fmt.Println("Lost", p.Lost)
@@ -55,7 +55,7 @@ func Primary(ID string) {
 
 				case <-ticker.C:
 
-					statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: [4][3]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}}
+					statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: [4][3]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}, Version: fsm.Version}
 
 					/*
 						case a <-orderRX:

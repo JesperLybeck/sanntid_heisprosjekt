@@ -18,6 +18,7 @@ func Backup(ID string) {
 		if !isBackup {
 			select {
 			case p := <-primaryStatusRX:
+				fmt.Println("fsm ver", fsm.Version, "p ver", p.Version)
 				if fsm.Version == p.Version {
 					println("Status from primary", p.TransmitterID, "to", p.ReceiverID)
 					fsm.PrimaryID = p.TransmitterID
@@ -33,23 +34,25 @@ func Backup(ID string) {
 
 				}
 			}
-			time.Sleep(500 * time.Millisecond)
-			if fsm.BackupID == ID {
+		}
+		time.Sleep(500 * time.Millisecond)
+		if fsm.BackupID == ID {
 
-				select {
-				case p := <-primaryStatusRX:
+			select {
+			case p := <-primaryStatusRX:
 
-					println("BackupID: ", fsm.BackupID, "My ID:", ID, "PrimaryID: ", fsm.PrimaryID)
-					LatestStatusFromPrimary = p
-					timeout = time.After(3 * time.Second)
+				println("BackupID: ", fsm.BackupID, "My ID:", ID, "PrimaryID: ", fsm.PrimaryID)
+				LatestStatusFromPrimary = p
+				timeout = time.After(3 * time.Second)
 
-				case <-timeout:
-					fmt.Println("Primary timed out")
-					fsm.Version++
-					fsm.PrimaryID = ID
-					fsm.BackupID = ""
-				}
+			case <-timeout:
+				fmt.Println("Primary timed out")
+				fsm.Version++
+				fsm.PrimaryID = ID
+				fsm.BackupID = ""
 			}
 		}
 	}
+		
 }
+
