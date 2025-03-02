@@ -35,16 +35,16 @@ func Primary(ID string) {
 								fsm.BackupID = p.Peers[i]
 							}
 						}
-						
 					}
+					fsm.LostElevators = append(fsm.LostElevators, p.Lost[0])
 					fmt.Println("Peer update", p.Peers)
 					fmt.Println("New", p.New)
 					fmt.Println("Lost", p.Lost)
 					for i := 0; i < len(p.Lost); i++ {
-						if p.Lost[i]==fsm.BackupID{
+						if p.Lost[i] == fsm.BackupID {
 							println("Backup lost")
 							for j := 0; j < len(p.Peers); j++ {
-								if p.Peers[j]!= fsm.PrimaryID{
+								if p.Peers[j] != fsm.PrimaryID {
 									fsm.BackupID = p.Peers[j]
 								} else {
 									fsm.BackupID = ""
@@ -55,19 +55,18 @@ func Primary(ID string) {
 
 				case <-ticker.C:
 
-					statusTX <- fsm.Status{TransmitterID: ID, RecieverID: fsm.BackupID, Orders: [4][3]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}}
-					
-				/*
-				case a <-orderRX:
-					Hall assignment 
-					change ID in order 
-					orderTX <- a
-				
+					statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: [4][3]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}}
+
+					/*
+						case a <-orderRX:
+							Hall assignment
+							change ID in order
+							orderTX <- a
+
 					*/
 				}
 			}
 		}
 	}
-
 
 }

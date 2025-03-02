@@ -21,7 +21,7 @@ func startDoorTimer(doorTimeout chan<- bool) {
 	})
 }
 
-var StartingAsPrimary = flag.Bool("primary", false, "Start as primary")
+var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary")
 
 func main() {
 	flag.Parse()
@@ -65,21 +65,15 @@ func main() {
 	floorReached := make(chan int)
 	doorTimeout := make(chan bool)
 	TXOrderCh := make(chan fsm.Order)
-	RXOrderCh := make(chan fsm.Order)
 
 	time.Sleep(1 * time.Second)
 
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
 	go bcast.Transmitter(12070, TXOrderCh)
-	go bcast.Receiver(12070, RXOrderCh)
 
 	for {
 		select {
-		case a := <-RXOrderCh:
-			if a.Role == "backup" && a.TargetID == ID {
-				fsm.BackupID = ID
-			}
 
 		case a := <-newOrder:
 
