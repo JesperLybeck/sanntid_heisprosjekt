@@ -56,13 +56,11 @@ func RequestsBelow(elevator ElevatorInput) bool {
 }
 
 func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
-	fmt.Println("motor direction at floor reached", storedOutput.MotorDirection)
 	var nextState ElevatorState
 	var nextOutput ElevatorOutput
 	var QueueNotEmpty bool = false
 	var numLights int = 0
 	storedInput.PrevFloor = event
-	fmt.Println("buttonlights", storedOutput.ButtonLights)
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 4; j++ {
 			if storedOutput.ButtonLights[j][i] {
@@ -77,26 +75,13 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.ButtonLights = storedInput.PressedButtons
 		nextOutput.Door = true
-		println("Queue is empty, stopping at floor", event)
 		return ElevatorDescision{nextState, nextOutput}
 	}
-	/*fmt.Println("storedInput",storedInput)
-	//if (storedInput.PressedButtons[event][0] && storedOutput.MotorDirection == elevio.MD_Up) || (storedInput.PressedButtons[event][1] && storedOutput.MotorDirection == elevio.MD_Down) || (storedInput.PressedButtons[event][2]) {
-	isCabCall := storedOutput.ButtonLights[event][2]
-	isOrderInDirectionUp := (storedOutput.ButtonLights[event][0] && storedOutput.MotorDirection == elevio.MD_Up) || (storedOutput.ButtonLights[event][1] && storedOutput.MotorDirection == elevio.MD_Up && !RequestsAbove(storedInput))
-	isOrderInDirectionDown := (storedOutput.ButtonLights[event][1] && storedOutput.MotorDirection == elevio.MD_Down) || (storedOutput.ButtonLights[event][0] && storedOutput.MotorDirection == elevio.MD_Down && !RequestsBelow(storedInput))
-	isOrderFirstFloor := (storedOutput.ButtonLights[0][0] || storedOutput.ButtonLights[0][1] || storedOutput.ButtonLights[0][2]) && event == 0
-	isOrderTopFloor := (storedOutput.ButtonLights[NFloors-1][0] || storedOutput.ButtonLights[NFloors-1][1] || storedOutput.ButtonLights[NFloors-1][2]) && event == NFloors-1
-	isOnlyOrder := numLights == 1 && (storedOutput.ButtonLights[event][0] || storedOutput.ButtonLights[event][1] || storedOutput.ButtonLights[event][2])
-	println("isCabCall", isCabCall, "isOrderInDirectionUp", isOrderInDirectionUp, "isOrderInDirectionDown", isOrderInDirectionDown, "isOrderFirstFloor", isOrderFirstFloor, "isOrderTopFloor", isOrderTopFloor)
-	*/
-	print("any below", RequestsBelow(storedInput))
+	
 	caseDown := storedOutput.MotorDirection == elevio.MD_Down && (storedOutput.ButtonLights[event][1] || storedOutput.ButtonLights[event][2] || !RequestsBelow(storedInput))
 	caseUp := storedOutput.MotorDirection == elevio.MD_Up && (storedOutput.ButtonLights[event][0] || storedOutput.ButtonLights[event][2] || !RequestsAbove(storedInput))
 
-	// isCabCall || isOrderInDirectionUp || isOrderInDirectionDown || isOrderFirstFloor || isOrderTopFloor || isOnlyOrder {
 	if caseDown  {
-		fmt.Println("stopping at floor", event)
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
@@ -110,7 +95,6 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		return ElevatorDescision{nextState, nextOutput}
 	}
 	if  caseUp {
-		fmt.Println("stopping at floor", event)
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
@@ -123,7 +107,6 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		storedInput.PressedButtons = storedOutput.ButtonLights
 		return ElevatorDescision{nextState, nextOutput}
 	}
-	fmt.Println("decided direction", storedOutput.MotorDirection)
 	return ElevatorDescision{MovingPassingFloor, storedOutput}
 }
 
@@ -131,48 +114,37 @@ func HandleNewOrder(state ElevatorState, event elevio.ButtonEvent, storedInput E
 
 	var nextState ElevatorState
 	var nextOutput ElevatorOutput
-	println("new order, state:", state)
 	if state == Idle {
 		fmt.Println(storedInput.PrevFloor, event.Floor)
 		if storedInput.PrevFloor < event.Floor {
-			fmt.Println("new order up")
 			nextOutput.MotorDirection = elevio.MD_Up
 			nextOutput.ButtonLights = storedInput.PressedButtons
 			nextState = MovingBetweenFloors
 
 		} else if storedInput.PrevFloor > event.Floor {
-			fmt.Println("new order down")
 			nextOutput.MotorDirection = elevio.MD_Down
 			nextOutput.ButtonLights = storedInput.PressedButtons
 			nextState = MovingBetweenFloors
 
 		} else {
 			nextOutput.MotorDirection = elevio.MD_Stop
-			fmt.Println("new order at current floor")
 			nextState = DoorOpen
 			nextOutput.Door = true
 			nextOutput.ButtonLights = storedInput.PressedButtons
 			nextOutput.ButtonLights[event.Floor][0] = false
 			nextOutput.ButtonLights[event.Floor][1] = false
 			nextOutput.ButtonLights[event.Floor][2] = false
-			println("evetnfloor", event.Floor, elevio.GetFloor())
 			storedInput.PressedButtons = nextOutput.ButtonLights
-			//println(3)
 
 		}
 		return ElevatorDescision{nextState, nextOutput}
 	} else if state == DoorOpen {
 		nextOutput.ButtonLights = storedInput.PressedButtons
 		nextOutput.MotorDirection = elevio.MD_Stop
-		fmt.Println("New order at door open", storedInput.PrevFloor, event.Floor)
 
 	} else {
-		fmt.Println("BITCH", storedInput.PrevFloor, event.Floor)
-		fmt.Println("BITCH", storedInput.PressedButtons)
 		nextOutput.ButtonLights = storedInput.PressedButtons
 		nextOutput.MotorDirection = storedOutput.MotorDirection
-		fmt.Println(storedOutput.MotorDirection)
-
 	}
 	return ElevatorDescision{state, nextOutput}
 
@@ -205,18 +177,14 @@ func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) E
 				nextState = MovingBetweenFloors
 			}
 		case elevio.MD_Up:
-			fmt.Println("motor direction up", storedOutput.MotorDirection)
 			if RequestsAbove(storedInput) {
 				nextOutput.MotorDirection = elevio.MD_Up
 				nextState = MovingBetweenFloors
 			} else if RequestsBelow(storedInput) && (storedInput.PressedButtons[storedInput.PrevFloor][0]) {
-				fmt.Println("request under, open door", storedInput.PressedButtons)
 				nextState = DoorOpen
 				nextOutput.Door = true
 				nextOutput.MotorDirection = elevio.MD_Stop
 			} else if RequestsBelow(storedInput) {
-				fmt.Println("request under, moving down", storedInput.PressedButtons[storedInput.PrevFloor][0], storedInput.PrevFloor)
-				fmt.Println("request under, pressed", storedInput.PressedButtons)
 				nextOutput.MotorDirection = elevio.MD_Down
 				nextState = MovingBetweenFloors
 			} else {
@@ -229,7 +197,6 @@ func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) E
 				nextOutput.MotorDirection = elevio.MD_Down
 				nextState = MovingBetweenFloors
 			} else if RequestsAbove(storedInput) && (storedInput.PressedButtons[storedInput.PrevFloor][1]) {
-				fmt.Println("Requests below, open door", storedInput.PressedButtons)
 				nextState = DoorOpen
 				nextOutput.Door = true
 				nextOutput.MotorDirection = elevio.MD_Stop
@@ -244,6 +211,5 @@ func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) E
 
 	}
 	nextOutput.ButtonLights = storedOutput.ButtonLights
-	fmt.Println("motordirection decided be door timeout", nextOutput.MotorDirection)
 	return ElevatorDescision{nextState, nextOutput}
 }

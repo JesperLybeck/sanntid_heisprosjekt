@@ -9,7 +9,7 @@ import (
 
 	//"Network-go/network/localip"
 	//"Network-go/network/peers"
-	"fmt"
+	//"fmt"
 	"time"
 )
 
@@ -20,9 +20,15 @@ func startDoorTimer(doorTimeout chan<- bool) {
 	})
 }
 
+var StartingAsPrimary bool = false
+
 func main() {
 
 	var ID = time.Now().Format("20060102150405")
+	if StartingAsPrimary {
+		fsm.PrimaryID = ID
+	}
+
 	peerTX := make(chan bool)
 	//AliveTicker := time.NewTicker(2 * time.Second)
 
@@ -31,13 +37,10 @@ func main() {
 	numFloors := 4
 	elevio.Init("localhost:15657", numFloors)
 
-	println("Initializing elevator")
 	for elevio.GetFloor() == -1 {
 		elevio.SetMotorDirection(elevio.MD_Up)
 	}
 
-	pba.DecideRole(ID)
-	go pba.CheckRoles(ID)
 	go pba.Primary(ID)
 	go pba.Backup(ID)
 
@@ -48,8 +51,6 @@ func main() {
 	}
 
 	elevio.SetMotorDirection(elevio.MD_Stop)
-	println("start floor reached")
-	println(elevio.GetFloor())
 
 	var state fsm.ElevatorState = fsm.Idle
 	var storedInput fsm.ElevatorInput
@@ -93,8 +94,6 @@ func main() {
 				elevio.SetMotorDirection(storedOutput.MotorDirection)
 				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
 
-				fmt.Println(decision.ElevatorOutput.ButtonLights, "buttonlights from descision")
-
 				for i := 0; i < 3; i++ {
 					for j := 0; j < 4; j++ {
 						if decision.ElevatorOutput.ButtonLights[j][i] {
@@ -116,8 +115,6 @@ func main() {
 				state = decision.NextState
 				storedOutput = decision.ElevatorOutput
 				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
-				fmt.Println(storedInput.PressedButtons, "pressed buttons after new order")
-				fmt.Println(storedOutput.ButtonLights, "store buttonlights after NEW order")
 
 			case fsm.DoorOpen:
 				decision := fsm.HandleNewOrder(state, a, storedInput, storedOutput)
@@ -126,14 +123,10 @@ func main() {
 				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
 
 				//case fsm.MovingPassingFloor:
-
 			}
 		case a := <-floorReached:
-			fmt.Println("Floor reached")
-
 			elevio.SetFloorIndicator(a)
 			prevDirection := storedOutput.MotorDirection
-			println("prevDirection", prevDirection)
 			decision := fsm.HandleFloorReached(a, storedInput, storedOutput)
 			state = decision.NextState
 			storedInput.PrevFloor = a
@@ -169,9 +162,6 @@ func main() {
 			}
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 			storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
-
-			println("door sequece done")
-
 		}
 	}
 
