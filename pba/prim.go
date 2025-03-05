@@ -42,6 +42,9 @@ func Primary(ID string) {
 						fmt.Println("Peer update", p.Peers)
 						fmt.Println("New", p.New)
 						fmt.Println("Lost", p.Lost)
+						
+						// LAG EN MAPPING MELLOM HEISINDEKS OG ID
+
 						for i := 0; i < len(p.Lost); i++ {
 							if p.Lost[i] == fsm.BackupID {
 								println("Backup lost")
@@ -65,10 +68,11 @@ func Primary(ID string) {
 						//Hall assignment
 						
 						//Update storedOrders
-						storedOrders = AssignRequest(a, storedOrders)
+						var responsibleElevator int
+						storedOrders,responsibleElevator = AssignRequest(a, storedOrders)
 						//sent to backup in next status update
 						
-						
+						a.Orders = storedOrders[][][responsibleElevator]
 
 						orderTX <- a
 					
