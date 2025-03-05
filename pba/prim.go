@@ -63,7 +63,13 @@ func Primary(ID string) {
 					
 					case a := <-orderRX:
 						//Hall assignment
+						
 						//Update storedOrders
+						storedOrders = AssignRequest(a, storedOrders)
+						//sent to backup in next status update
+						
+						
+
 						orderTX <- a
 					
 					}
