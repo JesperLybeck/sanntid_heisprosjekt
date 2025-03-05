@@ -32,7 +32,6 @@ func main() {
 	}
 
 	peerTX := make(chan bool)
-	//AliveTicker := time.NewTicker(2 * time.Second)
 
 	go peers.Transmitter(12055, ID, peerTX)
 
@@ -66,18 +65,20 @@ func main() {
 	doorTimeout := make(chan bool)
 	TXOrderCh := make(chan fsm.Order)
 	RXOrderCh := make(chan fsm.Order)
+	TXFloorReached := make(chan int)
+
 
 	time.Sleep(1 * time.Second)
 
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
 	go bcast.Transmitter(13057, TXOrderCh)
+	go bcast.Transmitter(13055, TXFloorReached)
 	go bcast.Receiver(13056, RXOrderCh)
 
 	for {
 		select {
 		case a := <-newOrder:
-
 			OrderToPrimary := fsm.Order{
 				ButtonEvent: a,
 				ID:          ID,
@@ -85,64 +86,24 @@ func main() {
 				Orders: storedInput.PressedButtons,
 			}
 			TXOrderCh <- OrderToPrimary
-
 		case a := <-RXOrderCh:
 			if a.TargetID != ID {
 				continue
 			}
-			b := a.ButtonEvent
-			elevio.SetButtonLamp(b.Button, b.Floor, true)
-			storedInput.PressedButtons[b.Floor][b.Button] = true
-			storedOutput.ButtonLights = storedInput.PressedButtons
-
-			switch state {
-			case fsm.Idle:
-
-				decision := fsm.HandleNewOrder(state, b, storedInput, storedOutput)
-				state = decision.NextState
-				storedOutput = decision.ElevatorOutput
-				elevio.SetMotorDirection(storedOutput.MotorDirection)
-				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
-
-				for i := 0; i < fsm.NButtons; i++ {
-					for j := 0; j < fsm.NFloors; j++ {
-						if decision.ElevatorOutput.ButtonLights[j][i] {
-							elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
-						} else {
-							elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
-						}
-					}
-				}
-				if a.Floor == elevio.GetFloor() {
-
-					go startDoorTimer(doorTimeout)
-					elevio.SetDoorOpenLamp(true)
-
-				}
-
-			case fsm.MovingBetweenFloors:
-				decision := fsm.HandleNewOrder(state, b, storedInput, storedOutput)
-				state = decision.NextState
-				storedOutput = decision.ElevatorOutput
-				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
-
-			case fsm.DoorOpen:
-				decision := fsm.HandleNewOrder(state, b, storedInput, storedOutput)
-				state = decision.NextState
-				storedOutput = decision.ElevatorOutput
-				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
-
-				//case fsm.MovingPassingFloor:
+			// While buttonlight off, spam order recieved
+			if fsm.QueueEmpty(storedInput.PressedButtons) {
+				doorTimeout <- true
 			}
+			storedInput.PressedButtons = a.Orders
+			
 		case a := <-floorReached:
 			elevio.SetFloorIndicator(a)
 			prevDirection := storedOutput.MotorDirection
 			decision := fsm.HandleFloorReached(a, storedInput, storedOutput)
 			state = decision.NextState
 			storedInput.PrevFloor = a
-
-			for i := 0; i < 3; i++ {
-				for j := 0; j < 4; j++ {
+			for i := 0; i < fsm.NButtons; i++ {
+				for j := 0; j < fsm.NFloors; j++ {
 					if decision.ElevatorOutput.ButtonLights[j][i] {
 						elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
 					} else {
@@ -150,7 +111,6 @@ func main() {
 					}
 				}
 			}
-
 			if state == fsm.DoorOpen {
 				go startDoorTimer(doorTimeout)
 				elevio.SetDoorOpenLamp(true)
@@ -158,9 +118,10 @@ func main() {
 			storedOutput.MotorDirection = prevDirection
 			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
 			storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights
-
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 
+			// while buttonlight on, spam floor reached
+			TXFloorReached <- a
 		case <-doorTimeout:
 			storedInput.PrevFloor = elevio.GetFloor()
 			elevio.SetDoorOpenLamp(false)
@@ -176,3 +137,4 @@ func main() {
 	}
 
 }
+

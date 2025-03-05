@@ -2,7 +2,6 @@ package fsm
 
 import (
 	"Sanntid/elevio"
-
 	"fmt"
 )
 
@@ -55,22 +54,23 @@ func RequestsBelow(elevator ElevatorInput) bool {
 	return false
 }
 
-func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
-	var nextState ElevatorState
-	var nextOutput ElevatorOutput
-	var QueueNotEmpty bool = false
-	var numLights int = 0
-	storedInput.PrevFloor = event
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 4; j++ {
-			if storedOutput.ButtonLights[j][i] {
-				QueueNotEmpty = true
-				numLights++
-				break
+func QueueEmpty(queue [4][3]bool) bool {
+	for i := 0; i < NButtons; i++ {
+		for j := 0; j < NFloors; j++ {
+			if queue[j][i] {
+				return false
 			}
 		}
 	}
-	if !QueueNotEmpty {
+	return true
+}
+
+func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
+	var nextState ElevatorState
+	var nextOutput ElevatorOutput
+	storedInput.PrevFloor = event
+	
+	if QueueEmpty(storedInput.PressedButtons) {
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.ButtonLights = storedInput.PressedButtons
@@ -152,14 +152,7 @@ func HandleNewOrder(state ElevatorState, event elevio.ButtonEvent, storedInput E
 func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
 	var nextState ElevatorState
 	var nextOutput ElevatorOutput
-	unservedOrders := false
-	for i := 0; i < 4; i++ {
-		if storedInput.PressedButtons[i][0] || storedInput.PressedButtons[i][1] || storedInput.PressedButtons[i][2] {
-			unservedOrders = true
-			break
-		}
-	}
-	if !unservedOrders {
+	if QueueEmpty(storedInput.PressedButtons) {
 		nextOutput.Door = false
 		nextState = Idle
 
