@@ -60,13 +60,12 @@ func Primary(ID string) {
 
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: storedOrders, Version: fsm.Version}
 
-						/*
-							case a <-orderRX:
-								Hall assignment
-								change ID in order
-								orderTX <- a
-
-						*/
+					
+					case a := <-orderRX:
+						//Hall assignment
+						//Update storedOrders
+						orderTX <- a
+					
 					}
 				}
 			}

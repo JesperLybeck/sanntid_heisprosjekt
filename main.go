@@ -65,33 +65,47 @@ func main() {
 	floorReached := make(chan int)
 	doorTimeout := make(chan bool)
 	TXOrderCh := make(chan fsm.Order)
+	RXOrderCh := make(chan fsm.Order)
 
 	time.Sleep(1 * time.Second)
 
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
-	go bcast.Transmitter(12070, TXOrderCh)
+	go bcast.Transmitter(13057, TXOrderCh)
+	go bcast.Receiver(13056, RXOrderCh)
 
 	for {
 		select {
-
 		case a := <-newOrder:
 
-			elevio.SetButtonLamp(a.Button, a.Floor, true)
-			storedInput.PressedButtons[a.Floor][a.Button] = true
+			OrderToPrimary := fsm.Order{
+				ButtonEvent: a,
+				ID:          ID,
+				TargetID:   fsm.PrimaryID,
+				Orders: storedInput.PressedButtons,
+			}
+			TXOrderCh <- OrderToPrimary
+
+		case a := <-RXOrderCh:
+			if a.TargetID != ID {
+				continue
+			}
+			b := a.ButtonEvent
+			elevio.SetButtonLamp(b.Button, b.Floor, true)
+			storedInput.PressedButtons[b.Floor][b.Button] = true
 			storedOutput.ButtonLights = storedInput.PressedButtons
 
 			switch state {
 			case fsm.Idle:
 
-				decision := fsm.HandleNewOrder(state, a, storedInput, storedOutput)
+				decision := fsm.HandleNewOrder(state, b, storedInput, storedOutput)
 				state = decision.NextState
 				storedOutput = decision.ElevatorOutput
 				elevio.SetMotorDirection(storedOutput.MotorDirection)
 				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
 
-				for i := 0; i < 3; i++ {
-					for j := 0; j < 4; j++ {
+				for i := 0; i < fsm.NButtons; i++ {
+					for j := 0; j < fsm.NFloors; j++ {
 						if decision.ElevatorOutput.ButtonLights[j][i] {
 							elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
 						} else {
@@ -107,13 +121,13 @@ func main() {
 				}
 
 			case fsm.MovingBetweenFloors:
-				decision := fsm.HandleNewOrder(state, a, storedInput, storedOutput)
+				decision := fsm.HandleNewOrder(state, b, storedInput, storedOutput)
 				state = decision.NextState
 				storedOutput = decision.ElevatorOutput
 				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
 
 			case fsm.DoorOpen:
-				decision := fsm.HandleNewOrder(state, a, storedInput, storedOutput)
+				decision := fsm.HandleNewOrder(state, b, storedInput, storedOutput)
 				state = decision.NextState
 				storedOutput = decision.ElevatorOutput
 				storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
