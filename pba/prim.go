@@ -9,6 +9,7 @@ import (
 )
 
 func Primary(ID string) {
+	storedOrders := [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool{}
 	for {
 		if ID == fsm.PrimaryID {
 
@@ -57,7 +58,7 @@ func Primary(ID string) {
 					case <-ticker.C:
 						fmt.Println("sending primary status version: ", fsm.Version)
 
-						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: [4][3]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}, Version: fsm.Version}
+						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: storedOrders, Version: fsm.Version}
 
 						/*
 							case a <-orderRX:
