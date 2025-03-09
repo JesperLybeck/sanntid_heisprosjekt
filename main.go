@@ -79,18 +79,23 @@ func main() {
 	for {
 		select {
 		case a := <-newOrder:
-			OrderToPrimary := fsm.Order{
-				ButtonEvent: a,
-				ID:          ID,
-				TargetID:   fsm.PrimaryID,
-				Orders: storedInput.PressedButtons,
+			switch a.Button{
+			case elevio.BT_Cab:
+				// Hva gjør vi med cab calls når internett er nede. 
+			default:
+				OrderToPrimary := fsm.Order{
+					ButtonEvent: a,
+					ID:          ID,
+					TargetID:   fsm.PrimaryID,
+					Orders: storedInput.PressedButtons,
+				}
+				TXOrderCh <- OrderToPrimary
 			}
-			TXOrderCh <- OrderToPrimary
 		case a := <-RXOrderCh:
 			if a.TargetID != ID {
 				continue
 			}
-			// While buttonlight off, spam order recieved
+			// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
 			if fsm.QueueEmpty(storedInput.PressedButtons) {
 				doorTimeout <- true
 			}
@@ -120,7 +125,7 @@ func main() {
 			storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 
-			// while buttonlight on, spam floor reached
+			// while buttonlight on, spam floor reached. Umulig, ingen funksjon som leser lysene
 			TXFloorReached <- a
 		case <-doorTimeout:
 			storedInput.PrevFloor = elevio.GetFloor()
