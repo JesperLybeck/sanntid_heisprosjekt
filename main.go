@@ -25,7 +25,7 @@ var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary"
 
 func main() {
 	flag.Parse()
-
+	//
 	var ID = time.Now().Format("20060102150405")
 	if *StartingAsPrimary {
 		fsm.PrimaryID = ID
