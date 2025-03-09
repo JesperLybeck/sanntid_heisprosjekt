@@ -100,7 +100,6 @@ func main() {
 				TXOrderCh <- OrderToPrimary
 			}
 		case a := <-RXOrderCh:
-			fmt.Println("Order recieved", a)
 			if a.TargetID != ID {
 				continue
 			}
@@ -113,6 +112,15 @@ func main() {
 				storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
 			}
 			storedInput.PressedButtons = a.Orders
+			for i := 0; i < fsm.NButtons; i++ {
+				for j := 0; j < fsm.NFloors; j++ {
+					if storedInput.PressedButtons[j][i] {
+						elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
+					} else {
+						elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
+					}
+				}
+			}
 		case a := <-floorReached:
 			elevio.SetFloorIndicator(a)
 			prevDirection := storedOutput.MotorDirection

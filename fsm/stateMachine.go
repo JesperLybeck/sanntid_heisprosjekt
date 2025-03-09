@@ -86,6 +86,7 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
 		nextOutput.ButtonLights = storedInput.PressedButtons
+		
 		if !RequestsBelow(storedInput) {
 			nextOutput.ButtonLights[event][0] = false
 		}

@@ -4,8 +4,8 @@ import (
 	"Network-go/network/bcast"
 	"Sanntid/fsm"
 	"fmt"
-	"time"
 	"strconv"
+	"time"
 )
 
 var LatestStatusFromPrimary fsm.Status
@@ -20,46 +20,47 @@ func Backup(ID string) {
 		if !isBackup {
 			select {
 			case p := <-primaryStatusRX:
-				if (p.TransmitterID == ID){
-					LatestStatusFromPrimary = p
-				}
-				if fsm.PrimaryID == ID && p.TransmitterID != ID { 
+				print("PRIMARY", fsm.PrimaryID)
+				print("Backup", ID)
+				if fsm.PrimaryID == ID && p.TransmitterID != ID {
 					intID, _ := strconv.Atoi(ID[len(ID)-2:])
 					intTransmitterID, _ := strconv.Atoi(p.TransmitterID[len(ID)-2:])
 					//Her mottar en primary melding fra en annen primary
-					println("MyID",intID, "Transmitter", intTransmitterID)
-					if  intID > intTransmitterID {
-						mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
+					print("MyID", intID, "Transmitter", intTransmitterID)
+					if intID > intTransmitterID {
+						println("Min ID større")
+						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
 						fsm.PrimaryID = ID
 						fsm.BackupID = p.TransmitterID
-					} else {
+					} else if intID < intTransmitterID{
+						println("Min ID mindre")
 						fsm.PrimaryID = p.TransmitterID
 						fsm.BackupID = ""
-
 					}
 
-				}
-
-				
-				if fsm.Version == p.Version {
+				} else {
 					println("Status from primary", p.TransmitterID, "to", p.ReceiverID)
-					fsm.PrimaryID = p.TransmitterID
+					if p.TransmitterID != ID{
+						fsm.PrimaryID = p.TransmitterID
+					}
 					if p.ReceiverID == ID {
 						fsm.BackupID = ID
 						isBackup = true
 					}
+
 					timeout = time.After(3 * time.Second)
-				}/* else if p.Version > fsm.Version {
+				} /* else if p.Version > fsm.Version {
 					fmt.Println("Primary version higher. accepting new primary")
 					fsm.Version = p.Version
 					fsm.PrimaryID = p.TransmitterID
 					timeout = time.After(3 * time.Second)
 
 				}*/
-				
+
 			}
 		}
 		time.Sleep(500 * time.Millisecond)
+
 		if fsm.BackupID == ID {
 
 			select {
