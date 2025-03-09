@@ -9,10 +9,9 @@ import (
 )
 
 func Primary(ID string) {
-	storedOrders := [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool{}
+
 	for {
 		if ID == fsm.PrimaryID {
-
 			statusTX := make(chan fsm.Status)
 			orderTX := make(chan fsm.Order)
 			orderRX := make(chan fsm.Order)
@@ -38,10 +37,19 @@ func Primary(ID string) {
 								}
 							}
 						}
-
+						for i := 0; i < len(p.New); i++ {
+							index, exists := getOrAssignIndex(string(p.New[i]))
+							println(index)
+							println(searchMap(index))
+							if exists {
+								// Retrieve CAB calls.
+								println("Retrieving CAB calls")
+							}
+						}
 						fmt.Println("Peer update", p.Peers)
 						fmt.Println("New", p.New)
 						fmt.Println("Lost", p.Lost)
+	
 						
 						// LAG EN MAPPING MELLOM HEISINDEKS OG ID
 
@@ -59,27 +67,50 @@ func Primary(ID string) {
 						}
 
 					case <-ticker.C:
-						fmt.Println("sending primary status version: ", fsm.Version)
-
-						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: storedOrders, Version: fsm.Version}
+						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version}
 
 					
 					case a := <-orderRX:
 						//Hall assignment
 						
-						//Update storedOrders
+						//Update StoredOrders
 						var responsibleElevator int
-						storedOrders,responsibleElevator = AssignRequest(a, storedOrders)
+						fsm.StoredOrders,responsibleElevator = AssignRequest(a, fsm.StoredOrders)
 						//sent to backup in next status update
 						
-						a.Orders = storedOrders[][][responsibleElevator]
+						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevator), Orders: extractOrder(fsm.StoredOrders, responsibleElevator)}
 
-						orderTX <- a
-					
+						orderTX <- newMessage
 					}
 				}
 			}
 		}
 	}
+}
 
+func extractOrder(StoredOrders [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool, elevator int) [fsm.NFloors][fsm.NButtons]bool {
+	var orders [fsm.NFloors][fsm.NButtons]bool
+	for i := 0; i < fsm.NFloors; i++ {
+		for j := 0; j < fsm.NButtons; j++ {
+			orders[i][j] = StoredOrders[i][j][elevator]
+		}
+	}
+	return orders
+}
+
+func getOrAssignIndex(ip string) (int, bool){
+	if index, exists := fsm.IpToIndexMap[ip]; exists {
+		return index, true
+	} else {
+		fsm.IpToIndexMap[ip] = len(fsm.IpToIndexMap)
+		return fsm.IpToIndexMap[ip], false
+	}
+}
+func searchMap(index int) string {
+	for key, value := range fsm.IpToIndexMap {
+		if value == index {
+			return key
+		}
+	}
+	return ""
 }

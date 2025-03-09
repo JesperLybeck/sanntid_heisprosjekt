@@ -40,22 +40,14 @@ func Backup(ID string) {
 				}
 
 				
-				if fsm.Version == p.Version {
-					println("Status from primary", p.TransmitterID, "to", p.ReceiverID)
-					fsm.PrimaryID = p.TransmitterID
-					if p.ReceiverID == ID {
-						fsm.BackupID = ID
-						isBackup = true
-					}
-					timeout = time.After(3 * time.Second)
-				}/* else if p.Version > fsm.Version {
-					fmt.Println("Primary version higher. accepting new primary")
-					fsm.Version = p.Version
-					fsm.PrimaryID = p.TransmitterID
-					timeout = time.After(3 * time.Second)
-
-				}*/
-				
+			
+				println("Status from primary", p.TransmitterID, "to", p.ReceiverID)
+				fsm.PrimaryID = p.TransmitterID
+				if p.ReceiverID == ID {
+					fsm.BackupID = ID
+					isBackup = true
+				}
+				timeout = time.After(3 * time.Second)
 			}
 		}
 		time.Sleep(500 * time.Millisecond)

@@ -10,6 +10,8 @@ var PrimaryID string = ""
 var BackupID string = ""
 var StartingAsPrimary bool = false
 var Version int = 0
+var StoredOrders [NFloors][NButtons][MElevators]bool
+var IpToIndexMap = make(map[string]int)
 
 type Status struct {
 	TransmitterID string
@@ -23,4 +25,5 @@ type Order struct {
 	ID       string
 	TargetID string
 	Orders   [NFloors][3]bool
+	Map 	map[string]int
 }

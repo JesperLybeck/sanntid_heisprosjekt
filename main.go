@@ -3,15 +3,15 @@ package main
 import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
+	"Network-go/network/localip"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
 	"flag"
-
-	//"Network-go/network/localip"
 	//"Network-go/network/peers"
-	//"fmt"
+	"fmt"
 	"time"
+	"os"
 )
 
 func startDoorTimer(doorTimeout chan<- bool) {
@@ -25,10 +25,13 @@ var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary"
 
 func main() {
 	flag.Parse()
-
-	var ID = time.Now().Format("20060102150405")
-	if *StartingAsPrimary {
-		fsm.PrimaryID = ID
+	var ID string
+	if ID == "" {
+		localIP, err := localip.LocalIP()
+		if err != nil {
+			localIP = "DISCONNECTED"
+		}
+		ID = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
 
 	peerTX := make(chan bool)
