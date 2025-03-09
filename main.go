@@ -3,15 +3,14 @@ package main
 import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
+	"Network-go/network/localip"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
 	"flag"
-
-	//"Network-go/network/localip"
 	//"Network-go/network/peers"
-	//"fmt"
 	"time"
+	"fmt"
 )
 
 func startDoorTimer(doorTimeout chan<- bool) {
@@ -25,13 +24,21 @@ var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary"
 
 func main() {
 	flag.Parse()
-	//
-	var ID = time.Now().Format("20060102150405")
+	var ID string
+	if ID == "" {
+		localIP, err := localip.LocalIP()
+		if err != nil {
+			localIP = "DISCONNECTED"
+		}
+		ID = localIP
+	}
 	if *StartingAsPrimary {
 		fsm.PrimaryID = ID
 	}
-
+	println(ID)
 	peerTX := make(chan bool)
+	//AliveTicker := time.NewTicker(2 * time.Second)
+	
 
 	go peers.Transmitter(12055, ID, peerTX)
 
@@ -65,23 +72,24 @@ func main() {
 	doorTimeout := make(chan bool)
 	TXOrderCh := make(chan fsm.Order)
 	RXOrderCh := make(chan fsm.Order)
-	TXFloorReached := make(chan int)
-
+	TXFloorReached := make(chan fsm.Order)
 
 	time.Sleep(1 * time.Second)
 
 	go elevio.PollButtons(newOrder)
 	go elevio.PollFloorSensor(floorReached)
 	go bcast.Transmitter(13057, TXOrderCh)
-	go bcast.Transmitter(13055, TXFloorReached)
 	go bcast.Receiver(13056, RXOrderCh)
+	go bcast.Transmitter(13058, TXFloorReached)
 
 	for {
 		select {
 		case a := <-newOrder:
+			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
+			// EVt bare cleare i retninga heisen går, ikke i motsatt retning
 			switch a.Button{
 			case elevio.BT_Cab:
-				// Hva gjør vi med cab calls når internett er nede. 
+				// Hva gjør vi med cab calls når internett er nede. TODO: Implementer ONLINE/OFFLINE 
 			default:
 				OrderToPrimary := fsm.Order{
 					ButtonEvent: a,
@@ -92,15 +100,20 @@ func main() {
 				TXOrderCh <- OrderToPrimary
 			}
 		case a := <-RXOrderCh:
+			fmt.Println("Order recieved", a)
 			if a.TargetID != ID {
 				continue
 			}
+			fmt.Println(storedInput.PressedButtons)
 			// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
 			if fsm.QueueEmpty(storedInput.PressedButtons) {
-				doorTimeout <- true
+				storedInput.PressedButtons = a.Orders
+				storedInput.PrevFloor = elevio.GetFloor()
+				decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
+				elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
+				storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
 			}
 			storedInput.PressedButtons = a.Orders
-			
 		case a := <-floorReached:
 			elevio.SetFloorIndicator(a)
 			prevDirection := storedOutput.MotorDirection
@@ -126,7 +139,10 @@ func main() {
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 
 			// while buttonlight on, spam floor reached. Umulig, ingen funksjon som leser lysene
-			TXFloorReached <- a
+			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{},ID: ID,TargetID:  fsm.PrimaryID,Orders:  storedInput.PressedButtons}
+			for range 5 {
+				TXFloorReached <- ArrivalMessage
+			}
 		case <-doorTimeout:
 			storedInput.PrevFloor = elevio.GetFloor()
 			elevio.SetDoorOpenLamp(false)
