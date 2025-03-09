@@ -39,9 +39,9 @@ func Primary(ID string) {
 								}
 							}
 						}
-						
+
 						index, exists := getOrAssignIndex(string(p.New))
-						println("Index",index, "IP", p.New)
+						println("Index", index, "IP", p.New)
 						println("Ip searched in map ", searchMap(index))
 						if exists {
 							// Retrieve CAB calls.
@@ -50,8 +50,7 @@ func Primary(ID string) {
 						fmt.Println("Peer update", p.Peers)
 						fmt.Println("New", p.New)
 						fmt.Println("Lost", p.Lost)
-	
-						
+
 						// LAG EN MAPPING MELLOM HEISINDEKS OG ID
 
 						for i := 0; i < len(p.Lost); i++ {
@@ -70,23 +69,22 @@ func Primary(ID string) {
 					case <-ticker.C:
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version}
 
-					
 					case a := <-orderRX:
 						//Hall assignment
-						
+
 						//Update StoredOrders
 						var responsibleElevator int
-						fsm.StoredOrders,responsibleElevator = AssignRequest(a, fsm.StoredOrders)
+						fsm.StoredOrders, responsibleElevator = AssignRequest(a, fsm.StoredOrders)
 						//sent to backup in next status update
 						println("Responsible elevator", responsibleElevator)
-						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: "10.100.23.22", Orders: extractOrder(fsm.StoredOrders, responsibleElevator)}
+						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevator), Orders: extractOrder(fsm.StoredOrders, responsibleElevator)}
 
 						orderTX <- newMessage
-					case a := <- RXFloorReached:
-						index, _:= getOrAssignIndex(string(a.ID))
+					case a := <-RXFloorReached:
+						index, _ := getOrAssignIndex(string(a.ID))
 						fsm.StoredOrders = updateOrders(a.Orders, index)
 					}
-					
+
 				}
 			}
 		}
@@ -113,7 +111,7 @@ func updateOrders(StoredOrders [fsm.NFloors][fsm.NButtons]bool, elevator int) [f
 	return orders
 }
 
-func getOrAssignIndex(ip string) (int, bool){
+func getOrAssignIndex(ip string) (int, bool) {
 	if index, exists := fsm.IpToIndexMap[ip]; exists {
 		return index, true
 	} else {
@@ -129,5 +127,3 @@ func searchMap(index int) string {
 	}
 	return ""
 }
-
-

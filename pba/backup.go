@@ -24,9 +24,10 @@ func Backup(ID string) {
 					LatestStatusFromPrimary = p
 				}
 				if fsm.PrimaryID == ID && p.TransmitterID != ID { 
-					intID, _ := strconv.Atoi(ID)
+					intID, _ := strconv.Atoi(ID[len(ID)-2:])
 					intTransmitterID, _ := strconv.Atoi(p.TransmitterID)
 					//Her mottar en primary melding fra en annen primary
+					println("MyID",intID, "Transmitter", intTransmitterID)
 					if  intID > intTransmitterID {
 						mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
 						fsm.PrimaryID = ID
@@ -84,7 +85,8 @@ func mergeOrders(orders1 [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool, orders
 	var mergedOrders [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons; j++ {
-			for k := 0; k < fsm.MElevators; i++ {
+			for k := 0; k < fsm.MElevators; k++ {
+				println(i,j,k)
 				if orders1[i][j][k] || orders2[i][j][k] {
 					mergedOrders[i][j][k] = true
 				}

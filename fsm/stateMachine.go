@@ -2,7 +2,7 @@ package fsm
 
 import (
 	"Sanntid/elevio"
-	"fmt"
+	
 )
 
 type ElevatorState int

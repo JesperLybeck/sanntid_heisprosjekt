@@ -108,7 +108,6 @@ func main() {
 			// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
 			if fsm.QueueEmpty(storedInput.PressedButtons) {
 				storedInput.PressedButtons = a.Orders
-				storedInput.PrevFloor = elevio.GetFloor()
 				decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
 				elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 				storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
@@ -118,6 +117,7 @@ func main() {
 			elevio.SetFloorIndicator(a)
 			prevDirection := storedOutput.MotorDirection
 			decision := fsm.HandleFloorReached(a, storedInput, storedOutput)
+			storedInput.PrevFloor = elevio.GetFloor()
 			state = decision.NextState
 			storedInput.PrevFloor = a
 			for i := 0; i < fsm.NButtons; i++ {
@@ -144,7 +144,6 @@ func main() {
 				TXFloorReached <- ArrivalMessage
 			}
 		case <-doorTimeout:
-			storedInput.PrevFloor = elevio.GetFloor()
 			elevio.SetDoorOpenLamp(false)
 			decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
 			state = decision.NextState
