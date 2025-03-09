@@ -9,9 +9,8 @@ import (
 	"Sanntid/pba"
 	"flag"
 	//"Network-go/network/peers"
-	"fmt"
 	"time"
-	"os"
+	"fmt"
 )
 
 func startDoorTimer(doorTimeout chan<- bool) {
@@ -31,11 +30,15 @@ func main() {
 		if err != nil {
 			localIP = "DISCONNECTED"
 		}
-		ID = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
+		ID = localIP
 	}
-
+	if *StartingAsPrimary {
+		fsm.PrimaryID = ID
+	}
+	println(ID)
 	peerTX := make(chan bool)
 	//AliveTicker := time.NewTicker(2 * time.Second)
+	
 
 	go peers.Transmitter(12055, ID, peerTX)
 
@@ -93,6 +96,7 @@ func main() {
 			if a.TargetID != ID {
 				continue
 			}
+			fmt.Printf("Order received: %+v\n", a.ButtonEvent)
 			b := a.ButtonEvent
 			elevio.SetButtonLamp(b.Button, b.Floor, true)
 			storedInput.PressedButtons[b.Floor][b.Button] = true
@@ -116,7 +120,7 @@ func main() {
 						}
 					}
 				}
-				if a.Floor == elevio.GetFloor() {
+				if a.ButtonEvent.Floor == elevio.GetFloor() {
 
 					go startDoorTimer(doorTimeout)
 					elevio.SetDoorOpenLamp(true)

@@ -18,12 +18,13 @@ type Status struct {
 	ReceiverID    string
 	Orders        [NFloors][NButtons][MElevators]bool
 	Version       int
+	Map 	    map[string]int
 }
 
+
 type Order struct {
-	elevio.ButtonEvent
+	ButtonEvent elevio.ButtonEvent
 	ID       string
 	TargetID string
 	Orders   [NFloors][3]bool
-	Map 	map[string]int
 }

@@ -37,15 +37,14 @@ func Primary(ID string) {
 								}
 							}
 						}
-						for i := 0; i < len(p.New); i++ {
-							index, exists := getOrAssignIndex(string(p.New[i]))
-							println(index)
-							println(searchMap(index))
-							if exists {
-								// Retrieve CAB calls.
-								println("Retrieving CAB calls")
-							}
+						
+						index, exists := getOrAssignIndex(string(p.New))
+						println("Index",index, "IP", p.New)
+						println("Ip searched in map ", searchMap(index))
+						if exists {
+							// Retrieve CAB calls.
 						}
+						println("Retrieving CAB calls")
 						fmt.Println("Peer update", p.Peers)
 						fmt.Println("New", p.New)
 						fmt.Println("Lost", p.Lost)
@@ -77,7 +76,7 @@ func Primary(ID string) {
 						var responsibleElevator int
 						fsm.StoredOrders,responsibleElevator = AssignRequest(a, fsm.StoredOrders)
 						//sent to backup in next status update
-						
+						println("Responsible elevator", responsibleElevator)
 						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevator), Orders: extractOrder(fsm.StoredOrders, responsibleElevator)}
 
 						orderTX <- newMessage
