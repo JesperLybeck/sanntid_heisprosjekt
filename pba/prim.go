@@ -14,8 +14,9 @@ func Primary(ID string) {
 			statusTX := make(chan fsm.Status)
 			orderTX := make(chan fsm.Order)
 			orderRX := make(chan fsm.Order)
+			nodeStatusRX := make(chan fsm.SingleElevatorStatus)
 			RXFloorReached := make(chan fsm.Order)
-			latestPeerUpdate := peers.PeerUpdate{}
+			latestPeerList := peers.PeerUpdate{}
 
 			//peerTX := make(chan bool)
 			peersRX := make(chan peers.PeerUpdate)
@@ -25,14 +26,19 @@ func Primary(ID string) {
 			go bcast.Transmitter(13056, orderTX)
 			go bcast.Receiver(13057, orderRX)
 			go bcast.Receiver(13058, RXFloorReached)
+			go bcast.Receiver(13059, nodeStatusRX)
 
 			ticker := time.NewTicker(2 * time.Second)
 
 			for {
 				if ID == fsm.PrimaryID {
 					select {
+					case nodeUpdate := <-nodeStatusRX:
+						//Update stored orders
+
+						updateNodeMap(nodeUpdate.ID, nodeUpdate)
 					case p := <-peersRX:
-						latestPeerUpdate = p
+						latestPeerList = p
 						if fsm.BackupID == "" && len(p.Peers) > 1 {
 							for i := 0; i < len(p.Peers); i++ {
 								if p.Peers[i] != ID {
@@ -41,13 +47,14 @@ func Primary(ID string) {
 							}
 						}
 
-						index, exists := getOrAssignIndex(string(p.New))
-						println("Index", index, "IP", p.New)
-						println("Ip searched in map ", searchMap(index))
+						_, exists := getOrAssignIndex(string(p.New))
+
 						if exists {
 							// Retrieve CAB calls.
+							// kanskje vi kan lage en "fake" new order? Eventuelt om vi bør endre single elevator til å ikke være event basert, men heller "while requests in queue"
+
+							println("Retrieving CAB calls")
 						}
-						println("Retrieving CAB calls")
 
 						// LAG EN MAPPING MELLOM HEISINDEKS OG ID
 
@@ -71,12 +78,13 @@ func Primary(ID string) {
 						//Hall assignment
 
 						//Update StoredOrders
-						var responsibleElevator int
-						fsm.StoredOrders, responsibleElevator = AssignRequest(latestPeerUpdate, a, fsm.StoredOrders)
+						responsibleElevator := AssignRequest(a, latestPeerList)
+						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
+						fsm.StoredOrders[a.ButtonEvent.Floor][a.ButtonEvent.Button][responsibleElevatorIndex] = true
 						//sent to backup in next status update
-						println("Responsible elevator", responsibleElevator)
-						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevator), Orders: extractOrder(fsm.StoredOrders, responsibleElevator)}
 
+						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevatorIndex), Orders: extractOrder(fsm.StoredOrders, responsibleElevatorIndex)}
+						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 						orderTX <- newMessage
 					case a := <-RXFloorReached:
 						index, _ := getOrAssignIndex(string(a.ID))
@@ -125,4 +133,12 @@ func searchMap(index int) string {
 		}
 	}
 	return ""
+}
+
+func updateNodeMap(ID string, status fsm.SingleElevatorStatus) {
+	if _, exists := fsm.NodeStatusMap[ID]; exists {
+		fsm.NodeStatusMap[ID] = status
+	} else {
+		fsm.NodeStatusMap[ID] = status
+	}
 }

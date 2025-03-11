@@ -12,6 +12,7 @@ var StartingAsPrimary bool = false
 var Version int = 0
 var StoredOrders [NFloors][NButtons][MElevators]bool
 var IpToIndexMap = make(map[string]int)
+var NodeStatusMap = make(map[string]SingleElevatorStatus)
 
 type Status struct {
 	TransmitterID string
@@ -26,4 +27,13 @@ type Order struct {
 	ID          string
 	TargetID    string
 	Orders      [NFloors][3]bool
+}
+type SingleElevatorStatus struct {
+	ID             string
+	PrevFloor      int
+	MotorDirection elevio.MotorDirection
+}
+type CostTuple struct {
+	Cost int
+	ID   string
 }

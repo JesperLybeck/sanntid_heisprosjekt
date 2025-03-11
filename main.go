@@ -25,6 +25,7 @@ func startDoorTimer(doorTimeout chan<- bool) {
 var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary")
 
 func main() {
+	statusTicker := time.NewTicker(2 * time.Second)
 	flag.Parse()
 	var ID string
 	ID = os.Getenv("ID")
@@ -38,6 +39,7 @@ func main() {
 
 	println("myID", ID)
 	peerTX := make(chan bool)
+	nodeStatusTX := make(chan fsm.SingleElevatorStatus)
 	//AliveTicker := time.NewTicker(2 * time.Second)
 
 	go peers.Transmitter(12055, ID, peerTX)
@@ -59,6 +61,7 @@ func main() {
 	if elevioPortNumber == "" {
 		elevioPortNumber = "localhost:15657" // Default value if the environment variable is not set
 	}
+	println("Port number: ", elevioPortNumber)
 	elevio.Init(elevioPortNumber, fsm.NFloors)
 
 	for elevio.GetFloor() == -1 {
@@ -97,16 +100,22 @@ func main() {
 	go bcast.Transmitter(13057, TXOrderCh)
 	go bcast.Receiver(13056, RXOrderCh)
 	go bcast.Transmitter(13058, TXFloorReached)
+	go bcast.Transmitter(13059, nodeStatusTX)
 
 	for {
 		select {
+
 		case a := <-newOrder:
+
 			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
 			// EVt bare cleare i retninga heisen går, ikke i motsatt retning
+			//Jo send ordre til primary, assign elevator skal da velge heisen som allerede er i etasjen.
+
 			switch a.Button {
 			case elevio.BT_Cab:
 				// Hva gjør vi med cab calls når internett er nede. TODO: Implementer ONLINE/OFFLINE
 			default:
+
 				OrderToPrimary := fsm.Order{
 					ButtonEvent: a,
 					ID:          ID,
@@ -116,10 +125,21 @@ func main() {
 				TXOrderCh <- OrderToPrimary
 			}
 		case a := <-RXOrderCh:
+			// En ordre som er kommet hit fra primary er skal være lagret av backup. Knappelys kan dermed skrus på her, så lengde det ikke er cab call.
+			if a.ButtonEvent.Floor == elevio.GetFloor() { //vi er allerede her? trigg arrived at floor
+				//floorReached <- a.ButtonEvent.Floor
+
+			}
+			if a.ButtonEvent.Button != elevio.BT_Cab {
+				elevio.SetButtonLamp(a.ButtonEvent.Button, a.ButtonEvent.Floor, true)
+			}
 			if a.TargetID != ID {
 				continue
 			}
-			print("Order recieved", ID)
+			if a.TargetID == ID {
+				print("Order recieved", a.ID, "floor", a.ButtonEvent.Floor)
+			}
+
 			// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
 			if fsm.QueueEmpty(storedInput.PressedButtons) {
 				storedInput.PressedButtons = a.Orders
@@ -146,8 +166,9 @@ func main() {
 			storedInput.PrevFloor = a
 			for i := 0; i < fsm.NButtons; i++ {
 				for j := 0; j < fsm.NFloors; j++ {
-					if decision.ElevatorOutput.ButtonLights[j][i] {
-						elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
+					if decision.ElevatorOutput.ButtonLights[j][i] { //buttonlights kan ikke bestemmer lokalt, dette må styres av primary,
+
+						elevio.SetButtonLamp(elevio.ButtonType(i), j, true) //vi må heller sende melding til primary at ordren er utført.
 					} else {
 						elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
 					}
@@ -158,9 +179,10 @@ func main() {
 				elevio.SetDoorOpenLamp(true)
 			}
 			storedOutput.MotorDirection = prevDirection
-			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights
-			storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights
-			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
+			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights //dette kan ikke gjøres slik.
+			storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights  //dette skaper mismatch mellom de forskjellige nodene.
+
+			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection) //vi må i stedet styre lys kun fra primary.
 
 			// while buttonlight on, spam floor reached. Umulig, ingen funksjon som leser lysene
 			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{}, ID: ID, TargetID: fsm.PrimaryID, Orders: storedInput.PressedButtons}
@@ -177,6 +199,9 @@ func main() {
 			}
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 			storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
+		case <-statusTicker.C:
+
+			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: storedOutput.MotorDirection}
 		}
 	}
 
