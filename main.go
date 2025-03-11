@@ -2,15 +2,17 @@ package main
 
 import (
 	"Network-go/network/bcast"
-	"Network-go/network/peers"
 	"Network-go/network/localip"
+	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
 	"flag"
+
 	//"Network-go/network/peers"
+
+	"os"
 	"time"
-	"fmt"
 )
 
 func startDoorTimer(doorTimeout chan<- bool) {
@@ -25,6 +27,7 @@ var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary"
 func main() {
 	flag.Parse()
 	var ID string
+	ID = os.Getenv("ID")
 	if ID == "" {
 		localIP, err := localip.LocalIP()
 		if err != nil {
@@ -32,18 +35,31 @@ func main() {
 		}
 		ID = localIP
 	}
-	if *StartingAsPrimary {
-		fsm.PrimaryID = ID
-	}
-	println(ID)
+
+	println("myID", ID)
 	peerTX := make(chan bool)
 	//AliveTicker := time.NewTicker(2 * time.Second)
-	
 
 	go peers.Transmitter(12055, ID, peerTX)
+	var StartingAsPrimary bool
+	StartingAsPrimaryEnv := os.Getenv("STARTASPRIM")
+	if StartingAsPrimaryEnv == "true" {
+		StartingAsPrimary = true
+		println("Starting as primary")
+	} else {
+		StartingAsPrimary = false
+		println("Not starting as primary")
+	}
 
-	numFloors := 4
-	elevio.Init("localhost:15657", numFloors)
+	if StartingAsPrimary {
+		fsm.PrimaryID = ID
+	}
+
+	elevioPortNumber := os.Getenv("PORT") // Read the environment variable
+	if elevioPortNumber == "" {
+		elevioPortNumber = "localhost:15657" // Default value if the environment variable is not set
+	}
+	elevio.Init(elevioPortNumber, fsm.NFloors)
 
 	for elevio.GetFloor() == -1 {
 		elevio.SetMotorDirection(elevio.MD_Up)
@@ -87,15 +103,15 @@ func main() {
 		case a := <-newOrder:
 			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
 			// EVt bare cleare i retninga heisen går, ikke i motsatt retning
-			switch a.Button{
+			switch a.Button {
 			case elevio.BT_Cab:
-				// Hva gjør vi med cab calls når internett er nede. TODO: Implementer ONLINE/OFFLINE 
+				// Hva gjør vi med cab calls når internett er nede. TODO: Implementer ONLINE/OFFLINE
 			default:
 				OrderToPrimary := fsm.Order{
 					ButtonEvent: a,
 					ID:          ID,
-					TargetID:   fsm.PrimaryID,
-					Orders: storedInput.PressedButtons,
+					TargetID:    fsm.PrimaryID,
+					Orders:      storedInput.PressedButtons,
 				}
 				TXOrderCh <- OrderToPrimary
 			}
@@ -103,7 +119,7 @@ func main() {
 			if a.TargetID != ID {
 				continue
 			}
-			fmt.Println(storedInput.PressedButtons)
+			print("Order recieved", ID)
 			// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
 			if fsm.QueueEmpty(storedInput.PressedButtons) {
 				storedInput.PressedButtons = a.Orders
@@ -147,7 +163,7 @@ func main() {
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 
 			// while buttonlight on, spam floor reached. Umulig, ingen funksjon som leser lysene
-			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{},ID: ID,TargetID:  fsm.PrimaryID,Orders:  storedInput.PressedButtons}
+			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{}, ID: ID, TargetID: fsm.PrimaryID, Orders: storedInput.PressedButtons}
 			for range 5 {
 				TXFloorReached <- ArrivalMessage
 			}
@@ -165,4 +181,3 @@ func main() {
 	}
 
 }
-

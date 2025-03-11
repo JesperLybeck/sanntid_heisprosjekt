@@ -20,8 +20,7 @@ func Backup(ID string) {
 		if !isBackup {
 			select {
 			case p := <-primaryStatusRX:
-				print("PRIMARY", fsm.PrimaryID)
-				print("Backup", ID)
+
 				if fsm.PrimaryID == ID && p.TransmitterID != ID {
 					intID, _ := strconv.Atoi(ID[len(ID)-2:])
 					intTransmitterID, _ := strconv.Atoi(p.TransmitterID[len(ID)-2:])
@@ -32,15 +31,15 @@ func Backup(ID string) {
 						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
 						fsm.PrimaryID = ID
 						fsm.BackupID = p.TransmitterID
-					} else if intID < intTransmitterID{
+					} else if intID < intTransmitterID {
 						println("Min ID mindre")
 						fsm.PrimaryID = p.TransmitterID
 						fsm.BackupID = ""
 					}
 
 				} else {
-					println("Status from primary", p.TransmitterID, "to", p.ReceiverID)
-					if p.TransmitterID != ID{
+
+					if p.TransmitterID != ID {
 						fsm.PrimaryID = p.TransmitterID
 					}
 					if p.ReceiverID == ID {
@@ -66,7 +65,6 @@ func Backup(ID string) {
 			select {
 			case p := <-primaryStatusRX:
 
-				println("BackupID: ", fsm.BackupID, "My ID:", ID, "PrimaryID: ", fsm.PrimaryID)
 				LatestStatusFromPrimary = p
 				timeout = time.After(3 * time.Second)
 

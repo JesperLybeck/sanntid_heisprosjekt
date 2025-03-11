@@ -1,6 +1,7 @@
 package pba
 
 import (
+	"Network-go/network/peers"
 	"Sanntid/fsm"
 	"math"
 )
@@ -169,12 +170,16 @@ func indexOf(arr []int, value int) int {
 	return -1 // Return -1 if the value is not found
 }
 
-func AssignRequest(order fsm.Order, status [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool) ([fsm.NFloors][fsm.NButtons][fsm.MElevators]bool, int) {
+func AssignRequest(peerList peers.PeerUpdate, order fsm.Order, status [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool) ([fsm.NFloors][fsm.NButtons][fsm.MElevators]bool, int) {
+
+	for i := 0; i < len(peerList.Peers); i++ {
+
+	}
+
 	numFloorsToIdle := 0
 	numDoorOpensToIdle := 0
 	prevOrderFloor := 0
 	completeTimes := make([]int, fsm.MElevators) // Declare completeTimes as an array
-	
 
 	for k := 0; k < fsm.MElevators; k++ {
 		numFloorsToIdle = 0

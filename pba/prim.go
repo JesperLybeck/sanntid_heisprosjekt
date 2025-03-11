@@ -4,7 +4,6 @@ import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
 	"Sanntid/fsm"
-	"fmt"
 	"time"
 )
 
@@ -16,6 +15,7 @@ func Primary(ID string) {
 			orderTX := make(chan fsm.Order)
 			orderRX := make(chan fsm.Order)
 			RXFloorReached := make(chan fsm.Order)
+			latestPeerUpdate := peers.PeerUpdate{}
 
 			//peerTX := make(chan bool)
 			peersRX := make(chan peers.PeerUpdate)
@@ -32,6 +32,7 @@ func Primary(ID string) {
 				if ID == fsm.PrimaryID {
 					select {
 					case p := <-peersRX:
+						latestPeerUpdate = p
 						if fsm.BackupID == "" && len(p.Peers) > 1 {
 							for i := 0; i < len(p.Peers); i++ {
 								if p.Peers[i] != ID {
@@ -47,9 +48,6 @@ func Primary(ID string) {
 							// Retrieve CAB calls.
 						}
 						println("Retrieving CAB calls")
-						fmt.Println("Peer update", p.Peers)
-						fmt.Println("New", p.New)
-						fmt.Println("Lost", p.Lost)
 
 						// LAG EN MAPPING MELLOM HEISINDEKS OG ID
 
@@ -74,7 +72,7 @@ func Primary(ID string) {
 
 						//Update StoredOrders
 						var responsibleElevator int
-						fsm.StoredOrders, responsibleElevator = AssignRequest(a, fsm.StoredOrders)
+						fsm.StoredOrders, responsibleElevator = AssignRequest(latestPeerUpdate, a, fsm.StoredOrders)
 						//sent to backup in next status update
 						println("Responsible elevator", responsibleElevator)
 						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevator), Orders: extractOrder(fsm.StoredOrders, responsibleElevator)}
@@ -112,6 +110,7 @@ func updateOrders(StoredOrders [fsm.NFloors][fsm.NButtons]bool, elevator int) [f
 }
 
 func getOrAssignIndex(ip string) (int, bool) {
+
 	if index, exists := fsm.IpToIndexMap[ip]; exists {
 		return index, true
 	} else {
