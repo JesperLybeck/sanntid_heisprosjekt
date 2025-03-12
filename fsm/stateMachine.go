@@ -64,6 +64,14 @@ func QueueEmpty(queue [4][3]bool) bool {
 	}
 	return true
 }
+func OrderAtFloor(queue [4][3]bool, floor int) bool {
+	for i := 0; i < NButtons; i++ {
+		if queue[floor][i] {
+			return true
+		}
+	}
+	return false
+}
 
 func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
 	var nextState ElevatorState

@@ -13,6 +13,7 @@ var Version int = 0
 var StoredOrders [NFloors][NButtons][MElevators]bool
 var IpToIndexMap = make(map[string]int)
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
+var AckPrefix = "ack"
 
 type Status struct {
 	TransmitterID string

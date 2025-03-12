@@ -84,11 +84,18 @@ func Primary(ID string) {
 						//sent to backup in next status update
 
 						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevatorIndex), Orders: extractOrder(fsm.StoredOrders, responsibleElevatorIndex)}
+						print("order received, sending to respqonsible elevator", responsibleElevator)
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 						orderTX <- newMessage
 					case a := <-RXFloorReached:
 						index, _ := getOrAssignIndex(string(a.ID))
 						fsm.StoredOrders = updateOrders(a.Orders, index)
+						//denne vil sendes til backup ved neste status.
+						//vi bør nok også gjøre denne eksplisitt.
+						//er litt jalla å bruke 0, men går jo fint da vi ikke bruker cab calls herfra uansett.
+						//
+						ackOrderCompleted := fsm.Order{ButtonEvent: a.ButtonEvent, ID: fsm.AckPrefix + a.ID, TargetID: fsm.BackupID, Orders: extractOrder(fsm.StoredOrders, 0)} //jeg angrer på rekkefølgen vi lagde kuben i. Er mye oftere vi vil ta ut alle ordrene fra en heis, enn vi vil ta ordre fra alle heisene på 1 etasje.
+						orderTX <- ackOrderCompleted
 					}
 
 				}
