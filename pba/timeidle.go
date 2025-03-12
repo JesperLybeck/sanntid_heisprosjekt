@@ -31,21 +31,15 @@ func indexOf(arr []int, value int) int {
 
 func AssignRequest(request fsm.Order, latestPeerList peers.PeerUpdate) string {
 	costs := make([]fsm.CostTuple, len(latestPeerList.Peers)) // costs for each elevator
+	if request.ButtonEvent.Button == 2 {
+		return request.ID
+	}
 
 	for p := 0; p < len(latestPeerList.Peers); p++ {
 		peerStatus := fsm.NodeStatusMap[latestPeerList.Peers[p]]
 		costs[p].ID = latestPeerList.Peers[p]
 		distanceCost := (peerStatus.PrevFloor - request.ButtonEvent.Floor) * (peerStatus.PrevFloor - request.ButtonEvent.Floor)
-		/*directionCost := 0
-		if peerStatus.MotorDirection == elevio.MD_Up && request.ButtonEvent.Button == elevio.BT_HallUp {
-			directionCost = 0
-		} else if peerStatus.MotorDirection == elevio.MD_Down && request.ButtonEvent.Button == elevio.BT_HallDown {
-			directionCost = 0
-		} else if peerStatus.MotorDirection == elevio.MD_Stop {
-			directionCost = 1
-		} else {
-			directionCost = 5
-		}*/
+		//Optional: add directional contribution to cost.
 
 		costs[p].Cost = distanceCost // + directionCost
 

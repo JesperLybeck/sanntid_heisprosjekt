@@ -8,6 +8,7 @@ import (
 	"Sanntid/fsm"
 	"Sanntid/pba"
 	"flag"
+	"fmt"
 
 	//"Network-go/network/peers"
 
@@ -25,6 +26,7 @@ func startDoorTimer(doorTimeout chan<- bool) {
 var StartingAsPrimary = flag.Bool("StartingAsPrimary", false, "Start as primary")
 
 func main() {
+
 	statusTicker := time.NewTicker(2 * time.Second)
 	flag.Parse()
 	var ID string
@@ -63,7 +65,6 @@ func main() {
 	}
 	println("Port number: ", elevioPortNumber)
 	elevio.Init(elevioPortNumber, fsm.NFloors)
-
 	for elevio.GetFloor() == -1 {
 		elevio.SetMotorDirection(elevio.MD_Up)
 	}
@@ -92,6 +93,7 @@ func main() {
 	TXOrderCh := make(chan fsm.Order)
 	RXOrderCh := make(chan fsm.Order)
 	TXFloorReached := make(chan fsm.Order)
+	RXLightUpdate := make(chan fsm.LightUpdate)
 
 	time.Sleep(1 * time.Second)
 
@@ -101,10 +103,23 @@ func main() {
 	go bcast.Receiver(13056, RXOrderCh)
 	go bcast.Transmitter(13058, TXFloorReached)
 	go bcast.Transmitter(13059, nodeStatusTX)
+	go bcast.Receiver(13060, RXLightUpdate)
 
 	for {
 		select {
 
+		case lights := <-RXLightUpdate:
+			if lights.ID == ID {
+				for i := 0; i < fsm.NButtons; i++ {
+					for j := 0; j < fsm.NFloors; j++ {
+						if lights.LightArray[j][i] {
+							elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
+						} else {
+							elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
+						}
+					}
+				}
+			}
 		case a := <-newOrder:
 
 			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
@@ -112,7 +127,15 @@ func main() {
 			//Jo send ordre til primary, assign elevator skal da velge heisen som allerede er i etasjen.
 
 			switch a.Button {
+
 			case elevio.BT_Cab:
+				OrderToPrimary := fsm.Order{
+					ButtonEvent: a,
+					ID:          ID,
+					TargetID:    fsm.PrimaryID,
+					Orders:      storedInput.PressedButtons,
+				}
+				TXOrderCh <- OrderToPrimary
 				// Hva gjør vi med cab calls når internett er nede. TODO: Implementer ONLINE/OFFLINE
 			default:
 
@@ -125,46 +148,72 @@ func main() {
 				TXOrderCh <- OrderToPrimary
 			}
 		case a := <-RXOrderCh:
-			// En ordre som er kommet hit fra primary er skal være lagret av backup. Knappelys kan dermed skrus på her, så lengde det ikke er cab call.
-			if a.ButtonEvent.Floor == elevio.GetFloor() { //vi er allerede her? trigg arrived at floor
-				//floorReached <- a.ButtonEvent.Floor
 
-			}
-			if a.ButtonEvent.Button != elevio.BT_Cab {
-				elevio.SetButtonLamp(a.ButtonEvent.Button, a.ButtonEvent.Floor, true)
-			}
-			if a.TargetID != ID {
+			if a.TargetID != ID { // hvis ordren er til en annen heis, ignorer.
 				continue
 			}
-			if a.TargetID == ID {
-				print("Order recieved", a.ID, "floor", a.ButtonEvent.Floor)
+			//-----------------------------SINGLE ELEVATOR TING------------------
+			print("Order recieved", a.TargetID)
+			if a.ButtonEvent.Floor == elevio.GetFloor() && a.TargetID == ID {
+
+				state = fsm.DoorOpen
+
+				go startDoorTimer(doorTimeout)
+				elevio.SetDoorOpenLamp(true) //letting primary know that the order is done.
+
+				continue
+				//hvis vi får en ordre når vi allerede er i etasjen, så skal vi åpne døra.
 			}
 
-			// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
 			if fsm.QueueEmpty(storedInput.PressedButtons) {
+
 				storedInput.PressedButtons = a.Orders
 				decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
 				elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 				storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
 			}
-			storedInput.PressedButtons = a.Orders
-			for i := 0; i < fsm.NButtons; i++ {
-				for j := 0; j < fsm.NFloors; j++ {
-					if storedInput.PressedButtons[j][i] {
-						elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
-					} else {
-						elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
+			fmt.Print(a.ID, storedInput.PressedButtons)
+			elevio.SetMotorDirection(storedOutput.MotorDirection)
+
+			/*
+				// En ordre som er kommet hit fra primary er skal være lagret av backup. Knappelys kan dermed skrus på her, så lengde det ikke er cab call.
+				.ButtonEvent.Button != elevio.BT_Cab {
+					elevio.SetButtonLamp(a.ButtonEvent.Button, a.ButtonEvent.Floor, true)
+				}
+				if a.TargetID != ID {
+					continue
+				}
+				if a.TargetID == ID {
+					print("Order recieved", a.ID, "floor", a.ButtonEvent.Floor)
+				}
+
+				// While buttonlight off, spam order recieved. Umulig, ingen funksjon som leser lysene
+				if fsm.QueueEmpty(storedInput.PressedButtons) {
+					storedInput.PressedButtons = a.Orders
+					decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
+					elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
+					storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
+				}
+				storedInput.PressedButtons = a.Orders
+				for i := 0; i < fsm.NButtons; i++ {
+					for j := 0; j < fsm.NFloors; j++ {
+						if storedInput.PressedButtons[j][i] {
+							elevio.SetButtonLamp(elevio.ButtonType(i), j, true)
+						} else {
+							elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
+						}
 					}
 				}
-			}
+			*/
 		case a := <-floorReached:
+
 			elevio.SetFloorIndicator(a)
 			prevDirection := storedOutput.MotorDirection
 			decision := fsm.HandleFloorReached(a, storedInput, storedOutput)
 			storedInput.PrevFloor = elevio.GetFloor()
 			state = decision.NextState
 			storedInput.PrevFloor = a
-			for i := 0; i < fsm.NButtons; i++ {
+			/*for i := 0; i < fsm.NButtons; i++ {
 				for j := 0; j < fsm.NFloors; j++ {
 					if decision.ElevatorOutput.ButtonLights[j][i] { //buttonlights kan ikke bestemmer lokalt, dette må styres av primary,
 
@@ -173,22 +222,20 @@ func main() {
 						elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
 					}
 				}
-			}
+			}*/
 			if state == fsm.DoorOpen {
 				go startDoorTimer(doorTimeout)
 				elevio.SetDoorOpenLamp(true)
 			}
+			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights //funksjonen må endres sånn at den returnerer pressed buttons istedet.
 			storedOutput.MotorDirection = prevDirection
-			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights //dette kan ikke gjøres slik.
-			storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights  //dette skaper mismatch mellom de forskjellige nodene.
+			//storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights //dette kan ikke gjøres slik.
+			//storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights  //dette skaper mismatch mellom de forskjellige nodene.
 
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection) //vi må i stedet styre lys kun fra primary.
 
 			// while buttonlight on, spam floor reached. Umulig, ingen funksjon som leser lysene
-			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{}, ID: ID, TargetID: fsm.PrimaryID, Orders: storedInput.PressedButtons}
-			for range 5 {
-				TXFloorReached <- ArrivalMessage
-			}
+
 		case <-doorTimeout:
 			elevio.SetDoorOpenLamp(false)
 			decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
@@ -197,8 +244,14 @@ func main() {
 				go startDoorTimer(doorTimeout)
 				elevio.SetDoorOpenLamp(true)
 			}
+
+			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: storedInput.PressedButtons}
+			for range 5 {
+				TXFloorReached <- ArrivalMessage
+			}
 			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 			storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
+
 		case <-statusTicker.C:
 
 			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: storedOutput.MotorDirection}

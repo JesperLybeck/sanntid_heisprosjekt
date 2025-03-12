@@ -4,6 +4,7 @@ import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
 	"Sanntid/fsm"
+	"fmt"
 	"time"
 )
 
@@ -17,6 +18,7 @@ func Primary(ID string) {
 			nodeStatusRX := make(chan fsm.SingleElevatorStatus)
 			RXFloorReached := make(chan fsm.Order)
 			latestPeerList := peers.PeerUpdate{}
+			TXLightUpdates := make(chan fsm.LightUpdate)
 
 			//peerTX := make(chan bool)
 			peersRX := make(chan peers.PeerUpdate)
@@ -27,8 +29,9 @@ func Primary(ID string) {
 			go bcast.Receiver(13057, orderRX)
 			go bcast.Receiver(13058, RXFloorReached)
 			go bcast.Receiver(13059, nodeStatusRX)
+			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(2 * time.Second)
+			ticker := time.NewTicker(1 * time.Second)
 
 			for {
 				if ID == fsm.PrimaryID {
@@ -46,6 +49,7 @@ func Primary(ID string) {
 								}
 							}
 						}
+						fmt.Print("latestPeerList", latestPeerList.Peers, "num peers: ", len(latestPeerList.Peers))
 
 						_, exists := getOrAssignIndex(string(p.New))
 
@@ -72,14 +76,21 @@ func Primary(ID string) {
 						}
 
 					case <-ticker.C:
+						//sending status to backup
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version}
+						//periodic light update to nodes.
+						for i := 0; i < fsm.MElevators; i++ {
+							lightUpdate := fsm.LightUpdate{LightArray: makeLightMatrix(searchMap(i), fsm.StoredOrders), ID: searchMap(i)}
+							TXLightUpdates <- lightUpdate
 
+						}
 					case a := <-orderRX:
 						//Hall assignment
 
 						//Update StoredOrders
 						responsibleElevator := AssignRequest(a, latestPeerList)
 						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
+
 						fsm.StoredOrders[a.ButtonEvent.Floor][a.ButtonEvent.Button][responsibleElevatorIndex] = true
 						//sent to backup in next status update
 
@@ -87,8 +98,14 @@ func Primary(ID string) {
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 						orderTX <- newMessage
 					case a := <-RXFloorReached:
-						index, _ := getOrAssignIndex(string(a.ID))
-						fsm.StoredOrders = updateOrders(a.Orders, index)
+						if a.ID != "" { //liker ikke dennne her):
+
+							index, _ := getIndex(a.ID)
+
+							fsm.StoredOrders = updateOrders(a.Orders, index)
+						}
+						print("----empty ", a.ID, "----")
+
 					}
 
 				}
@@ -116,13 +133,28 @@ func updateOrders(StoredOrders [fsm.NFloors][fsm.NButtons]bool, elevator int) [f
 	}
 	return orders
 }
-
-func getOrAssignIndex(ip string) (int, bool) {
-
+func getIndex(ip string) (int, bool) {
 	if index, exists := fsm.IpToIndexMap[ip]; exists {
+
 		return index, true
 	} else {
+		return -1, false
+	}
+
+}
+func getOrAssignIndex(ip string) (int, bool) {
+	if ip == "" {
+		print("ip is empty")
+	}
+
+	if index, exists := fsm.IpToIndexMap[ip]; exists {
+
+		return index, true
+	} else {
+
 		fsm.IpToIndexMap[ip] = len(fsm.IpToIndexMap)
+		print("ip ", ip, "not found")
+
 		return fsm.IpToIndexMap[ip], false
 	}
 }
@@ -132,6 +164,7 @@ func searchMap(index int) string {
 			return key
 		}
 	}
+
 	return ""
 }
 
@@ -141,4 +174,22 @@ func updateNodeMap(ID string, status fsm.SingleElevatorStatus) {
 	} else {
 		fsm.NodeStatusMap[ID] = status
 	}
+}
+
+func makeLightMatrix(ID string, StoredOrders [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool) [fsm.NFloors][fsm.NButtons]bool {
+	var lightMatrix [fsm.NFloors][fsm.NButtons]bool
+	for i := 0; i < fsm.NFloors; i++ {
+		for j := 0; j < fsm.NButtons-1; j++ { //we exclude the cab button here
+			for k := 0; k < fsm.MElevators; k++ {
+
+				lightMatrix[i][j] = lightMatrix[i][j] || StoredOrders[i][j][k]
+			}
+		}
+	}
+	for i := 0; i < fsm.NFloors; i++ {
+		nodeIndex, _ := getOrAssignIndex(ID)
+		lightMatrix[i][2] = extractOrder(StoredOrders, nodeIndex)[i][2]
+	}
+
+	return lightMatrix
 }

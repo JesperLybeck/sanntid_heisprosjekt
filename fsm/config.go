@@ -37,3 +37,7 @@ type CostTuple struct {
 	Cost int
 	ID   string
 }
+type LightUpdate struct {
+	LightArray [NFloors][NButtons]bool
+	ID         string
+}
