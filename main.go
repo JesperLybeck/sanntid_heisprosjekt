@@ -44,7 +44,6 @@ func main() {
 	nodeStatusTX := make(chan fsm.SingleElevatorStatus)
 	//AliveTicker := time.NewTicker(2 * time.Second)
 
-	go peers.Transmitter(12055, ID, peerTX)
 	var StartingAsPrimary bool
 	StartingAsPrimaryEnv := os.Getenv("STARTASPRIM")
 	if StartingAsPrimaryEnv == "true" {
@@ -104,6 +103,7 @@ func main() {
 	go bcast.Transmitter(13058, TXFloorReached)
 	go bcast.Transmitter(13059, nodeStatusTX)
 	go bcast.Receiver(13060, RXLightUpdate)
+	go peers.Transmitter(12055, ID, peerTX) //vi venter med å annonsere at vi er på nett frem til vi kan lytte til channels.
 
 	for {
 		select {
@@ -165,15 +165,19 @@ func main() {
 				//hvis vi får en ordre når vi allerede er i etasjen, så skal vi åpne døra.
 			}
 
-			if fsm.QueueEmpty(storedInput.PressedButtons) {
-
+			if fsm.QueueEmpty(storedInput.PressedButtons) { //dette vil også fungere når det kommer til å håndtere cab ordre som lastes inn.
+				print("queue empty")
 				storedInput.PressedButtons = a.Orders
 				decision := fsm.HandleDoorTimeout(storedInput, storedOutput)
 				elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
 				storedOutput.MotorDirection = decision.ElevatorOutput.MotorDirection
+			} else {
+				storedInput.PressedButtons = a.Orders
 			}
-			fmt.Print(a.ID, storedInput.PressedButtons)
+
 			elevio.SetMotorDirection(storedOutput.MotorDirection)
+
+			//vi mangler logikk for å håndtere ny ordre når køen ikke er tom!
 
 			/*
 				// En ordre som er kommet hit fra primary er skal være lagret av backup. Knappelys kan dermed skrus på her, så lengde det ikke er cab call.
@@ -223,12 +227,14 @@ func main() {
 					}
 				}
 			}*/
+			fmt.Print("før", storedInput.PressedButtons)
 			if state == fsm.DoorOpen {
 				go startDoorTimer(doorTimeout)
 				elevio.SetDoorOpenLamp(true)
 			}
 			storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights //funksjonen må endres sånn at den returnerer pressed buttons istedet.
 			storedOutput.MotorDirection = prevDirection
+			fmt.Print("etter", storedInput.PressedButtons)
 			//storedInput.PressedButtons = decision.ElevatorOutput.ButtonLights //dette kan ikke gjøres slik.
 			//storedOutput.ButtonLights = decision.ElevatorOutput.ButtonLights  //dette skaper mismatch mellom de forskjellige nodene.
 

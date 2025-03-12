@@ -3,6 +3,7 @@ package pba
 import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
+	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"fmt"
 	"time"
@@ -49,18 +50,32 @@ func Primary(ID string) {
 								}
 							}
 						}
-						fmt.Print("latestPeerList", latestPeerList.Peers, "num peers: ", len(latestPeerList.Peers))
+						if string(p.New) != "" {
+							index, exists := getOrAssignIndex(string(p.New))
 
-						_, exists := getOrAssignIndex(string(p.New))
+							fmt.Print("map: ", fsm.IpToIndexMap)
 
-						if exists {
-							// Retrieve CAB calls.
-							// kanskje vi kan lage en "fake" new order? Eventuelt om vi bør endre single elevator til å ikke være event basert, men heller "while requests in queue"
+							if exists {
+								// Retrieve CAB calls.
+								// kanskje vi kan lage en "fake" new order? Eventuelt om vi bør endre single elevator til å ikke være event basert, men heller "while requests in queue"
+								//Hvis vi finner at det er lagret cab calls for denne heisen som ikke er gjort her i remote, så trigger vi en ny ordre .
+								for i := 0; i < fsm.NFloors; i++ {
+									fmt.Print(fsm.StoredOrders[i][2][index])
+									if fsm.StoredOrders[i][2][index] {
+										print("prevusly stored cab call")
+										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: 2},
+											ID:       ID,
+											TargetID: string(p.New),
+											Orders:   extractOrder(fsm.StoredOrders, index)}
+										fmt.Print("restored cabcalls: ", newOrder.Orders, " for ", newOrder.TargetID)
+										orderTX <- newOrder
 
-							println("Retrieving CAB calls")
+									}
+								}
+
+								println("Retrieving CAB calls")
+							}
 						}
-
-						// LAG EN MAPPING MELLOM HEISINDEKS OG ID
 
 						for i := 0; i < len(p.Lost); i++ {
 							if p.Lost[i] == fsm.BackupID {
@@ -79,7 +94,7 @@ func Primary(ID string) {
 						//sending status to backup
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version}
 						//periodic light update to nodes.
-						for i := 0; i < fsm.MElevators; i++ {
+						for i := 0; i < len(latestPeerList.Peers); i++ {
 							lightUpdate := fsm.LightUpdate{LightArray: makeLightMatrix(searchMap(i), fsm.StoredOrders), ID: searchMap(i)}
 							TXLightUpdates <- lightUpdate
 
@@ -104,7 +119,6 @@ func Primary(ID string) {
 
 							fsm.StoredOrders = updateOrders(a.Orders, index)
 						}
-						print("----empty ", a.ID, "----")
 
 					}
 
@@ -143,9 +157,6 @@ func getIndex(ip string) (int, bool) {
 
 }
 func getOrAssignIndex(ip string) (int, bool) {
-	if ip == "" {
-		print("ip is empty")
-	}
 
 	if index, exists := fsm.IpToIndexMap[ip]; exists {
 

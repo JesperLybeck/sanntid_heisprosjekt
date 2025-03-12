@@ -2,7 +2,6 @@ package fsm
 
 import (
 	"Sanntid/elevio"
-	
 )
 
 type ElevatorState int
@@ -69,24 +68,26 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 	var nextState ElevatorState
 	var nextOutput ElevatorOutput
 	storedInput.PrevFloor = event
-	
+
 	if QueueEmpty(storedInput.PressedButtons) {
+		print("Queue empty")
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.ButtonLights = storedInput.PressedButtons
 		nextOutput.Door = true
 		return ElevatorDescision{nextState, nextOutput}
 	}
-	
+
 	caseDown := storedOutput.MotorDirection == elevio.MD_Down && (storedOutput.ButtonLights[event][1] || storedOutput.ButtonLights[event][2] || !RequestsBelow(storedInput))
 	caseUp := storedOutput.MotorDirection == elevio.MD_Up && (storedOutput.ButtonLights[event][0] || storedOutput.ButtonLights[event][2] || !RequestsAbove(storedInput))
 
-	if caseDown  {
+	if caseDown {
+		print("caseDown")
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
 		nextOutput.ButtonLights = storedInput.PressedButtons
-		
+
 		if !RequestsBelow(storedInput) {
 			nextOutput.ButtonLights[event][0] = false
 		}
@@ -95,7 +96,8 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		storedInput.PressedButtons = storedOutput.ButtonLights
 		return ElevatorDescision{nextState, nextOutput}
 	}
-	if  caseUp {
+	if caseUp {
+		print("caseUp")
 		nextState = DoorOpen
 		nextOutput.MotorDirection = elevio.MD_Stop
 		nextOutput.Door = true
@@ -103,11 +105,18 @@ func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput Eleva
 		if !RequestsAbove(storedInput) {
 			nextOutput.ButtonLights[event][1] = false
 		}
-		nextOutput.ButtonLights[event][0] = false
-		nextOutput.ButtonLights[event][2] = false
-		storedInput.PressedButtons = storedOutput.ButtonLights
+		if storedInput.PressedButtons[event][2] {
+			nextOutput.ButtonLights[event][0] = false
+			nextOutput.ButtonLights[event][2] = false
+			storedInput.PressedButtons = storedOutput.ButtonLights
+			nextState = DoorOpen
+		}
 		return ElevatorDescision{nextState, nextOutput}
 	}
+	print("ingen case")
+	storedOutput.ButtonLights = storedInput.PressedButtons
+	storedOutput.ButtonLights[event][2] = false
+
 	return ElevatorDescision{MovingPassingFloor, storedOutput}
 }
 
