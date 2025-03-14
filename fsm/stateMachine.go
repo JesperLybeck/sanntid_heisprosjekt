@@ -27,12 +27,17 @@ type ElevatorDescision struct {
 type ElevatorOutput struct {
 	MotorDirection elevio.MotorDirection
 	Door           bool
-	ButtonLights   [4][3]bool
+	LocalOrders    [NFloors][NButtons]bool
 }
 
 type ElevatorInput struct {
 	LocalRequests [NFloors][NButtons]bool
 	PrevFloor     int
+}
+type Elevator struct {
+	State  ElevatorState
+	Input  ElevatorInput
+	Output ElevatorOutput
 }
 
 func RequestsAbove(elevator ElevatorInput) bool {
@@ -66,114 +71,114 @@ func QueueEmpty(queue [4][3]bool) bool {
 
 func HandleFloorReached(event int, storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
 	var nextState ElevatorState
-	var nextOutput ElevatorOutput
+	var Output ElevatorOutput
 	storedInput.PrevFloor = event
 
 	if QueueEmpty(storedInput.LocalRequests) {
 		print("Queue empty")
 		nextState = DoorOpen
-		nextOutput.MotorDirection = elevio.MD_Stop
-		nextOutput.ButtonLights = storedInput.LocalRequests
-		nextOutput.Door = true
-		return ElevatorDescision{nextState, nextOutput}
+		Output.MotorDirection = elevio.MD_Stop
+		Output.LocalOrders = storedInput.LocalRequests
+		Output.Door = true
+		return ElevatorDescision{nextState, Output}
 	}
 
-	caseDown := storedOutput.MotorDirection == elevio.MD_Down && (storedOutput.ButtonLights[event][1] || storedOutput.ButtonLights[event][2] || !RequestsBelow(storedInput))
-	caseUp := storedOutput.MotorDirection == elevio.MD_Up && (storedOutput.ButtonLights[event][0] || storedOutput.ButtonLights[event][2] || !RequestsAbove(storedInput))
+	caseDown := storedOutput.MotorDirection == elevio.MD_Down && (storedOutput.LocalOrders[event][1] || storedOutput.LocalOrders[event][2] || !RequestsBelow(storedInput))
+	caseUp := storedOutput.MotorDirection == elevio.MD_Up && (storedOutput.LocalOrders[event][0] || storedOutput.LocalOrders[event][2] || !RequestsAbove(storedInput))
 
 	if caseDown {
 		print("caseDown")
 		nextState = DoorOpen
-		nextOutput.MotorDirection = elevio.MD_Stop
-		nextOutput.Door = true
-		nextOutput.ButtonLights = storedInput.LocalRequests
+		Output.MotorDirection = elevio.MD_Stop
+		Output.Door = true
+		Output.LocalOrders = storedInput.LocalRequests
 
 		if !RequestsBelow(storedInput) {
-			nextOutput.ButtonLights[event][0] = false
+			Output.LocalOrders[event][0] = false
 		}
-		nextOutput.ButtonLights[event][1] = false
-		nextOutput.ButtonLights[event][2] = false
-		storedInput.LocalRequests = storedOutput.ButtonLights
-		return ElevatorDescision{nextState, nextOutput}
+		Output.LocalOrders[event][1] = false
+		Output.LocalOrders[event][2] = false
+		storedInput.LocalRequests = storedOutput.LocalOrders
+		return ElevatorDescision{nextState, Output}
 	}
 	if caseUp {
 		print("caseUp")
 		nextState = DoorOpen
-		nextOutput.MotorDirection = elevio.MD_Stop
-		nextOutput.Door = true
-		nextOutput.ButtonLights = storedInput.LocalRequests
+		Output.MotorDirection = elevio.MD_Stop
+		Output.Door = true
+		Output.LocalOrders = storedInput.LocalRequests
 		if !RequestsAbove(storedInput) {
-			nextOutput.ButtonLights[event][1] = false
+			Output.LocalOrders[event][1] = false
 		}
 		if storedInput.LocalRequests[event][2] {
-			nextOutput.ButtonLights[event][0] = false
-			nextOutput.ButtonLights[event][2] = false
-			storedInput.LocalRequests = storedOutput.ButtonLights
+			Output.LocalOrders[event][0] = false
+			Output.LocalOrders[event][2] = false
+			storedInput.LocalRequests = storedOutput.LocalOrders
 			nextState = DoorOpen
 		}
-		return ElevatorDescision{nextState, nextOutput}
+		return ElevatorDescision{nextState, Output}
 	}
 	print("ingen case")
-	storedOutput.ButtonLights = storedInput.LocalRequests
-	storedOutput.ButtonLights[event][2] = false
+	storedOutput.LocalOrders = storedInput.LocalRequests
+	storedOutput.LocalOrders[event][2] = false
 
 	return ElevatorDescision{MovingPassingFloor, storedOutput}
 }
 
 func HandleDoorTimeout(storedInput ElevatorInput, storedOutput ElevatorOutput) ElevatorDescision {
 	var nextState ElevatorState
-	var nextOutput ElevatorOutput
+	var Output ElevatorOutput
 	if QueueEmpty(storedInput.LocalRequests) {
-		nextOutput.Door = false
+		Output.Door = false
 		nextState = Idle
 
 	} else {
 		switch storedOutput.MotorDirection {
 		case elevio.MD_Stop:
 			if RequestsAbove(storedInput) {
-				nextOutput.MotorDirection = elevio.MD_Up
+				Output.MotorDirection = elevio.MD_Up
 				nextState = MovingBetweenFloors
 			} else if RequestsBelow(storedInput) {
-				nextOutput.MotorDirection = elevio.MD_Down
+				Output.MotorDirection = elevio.MD_Down
 				nextState = MovingBetweenFloors
 			} else {
-				nextOutput.MotorDirection = elevio.MD_Stop
+				Output.MotorDirection = elevio.MD_Stop
 				nextState = MovingBetweenFloors
 			}
 		case elevio.MD_Up:
 			if RequestsAbove(storedInput) {
-				nextOutput.MotorDirection = elevio.MD_Up
+				Output.MotorDirection = elevio.MD_Up
 				nextState = MovingBetweenFloors
 			} else if RequestsBelow(storedInput) && (storedInput.LocalRequests[storedInput.PrevFloor][0]) {
 				nextState = DoorOpen
-				nextOutput.Door = true
-				nextOutput.MotorDirection = elevio.MD_Stop
+				Output.Door = true
+				Output.MotorDirection = elevio.MD_Stop
 			} else if RequestsBelow(storedInput) {
-				nextOutput.MotorDirection = elevio.MD_Down
+				Output.MotorDirection = elevio.MD_Down
 				nextState = MovingBetweenFloors
 			} else {
-				nextOutput.MotorDirection = elevio.MD_Stop
+				Output.MotorDirection = elevio.MD_Stop
 				nextState = MovingBetweenFloors
 			}
 
 		case elevio.MD_Down:
 			if RequestsBelow(storedInput) {
-				nextOutput.MotorDirection = elevio.MD_Down
+				Output.MotorDirection = elevio.MD_Down
 				nextState = MovingBetweenFloors
 			} else if RequestsAbove(storedInput) && (storedInput.LocalRequests[storedInput.PrevFloor][1]) {
 				nextState = DoorOpen
-				nextOutput.Door = true
-				nextOutput.MotorDirection = elevio.MD_Stop
+				Output.Door = true
+				Output.MotorDirection = elevio.MD_Stop
 			} else if RequestsAbove(storedInput) {
-				nextOutput.MotorDirection = elevio.MD_Up
+				Output.MotorDirection = elevio.MD_Up
 				nextState = MovingBetweenFloors
 			} else {
-				nextOutput.MotorDirection = elevio.MD_Stop
+				Output.MotorDirection = elevio.MD_Stop
 				nextState = MovingBetweenFloors
 			}
 		}
 
 	}
-	nextOutput.ButtonLights = storedOutput.ButtonLights
-	return ElevatorDescision{nextState, nextOutput}
+	Output.LocalOrders = storedOutput.LocalOrders
+	return ElevatorDescision{nextState, Output}
 }
