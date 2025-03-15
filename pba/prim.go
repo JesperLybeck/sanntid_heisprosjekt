@@ -38,7 +38,6 @@ func Primary(ID string) {
 				if ID == fsm.PrimaryID {
 					select {
 					case nodeUpdate := <-nodeStatusRX:
-						//Update stored orders
 
 						updateNodeMap(nodeUpdate.ID, nodeUpdate)
 					case p := <-peersRX:

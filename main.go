@@ -7,16 +7,23 @@ import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
-	"fmt"
 	"os"
 	"time"
 )
 
+// ------------------------------Utility functions--------------------------------
 func startDoorTimer(doorTimeout chan<- bool) {
 
 	time.AfterFunc(3*time.Second, func() {
 		doorTimeout <- true
 	})
+}
+
+func setHardwareEffects(E fsm.Elevator) {
+	elevio.SetMotorDirection(E.Output.MotorDirection)
+	elevio.SetDoorOpenLamp(E.Output.Door)
+	elevio.SetFloorIndicator(E.Input.PrevFloor)
+
 }
 
 // ----------------------------ENVIRONMENT VARIABLES-----------------------------
@@ -28,14 +35,14 @@ var elevioPortNumber string
 func main() {
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
-	nodeStatusTX := make(chan fsm.SingleElevatorStatus)
+	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
 	buttonPressCh := make(chan elevio.ButtonEvent)
 	floorReachedCh := make(chan int)
 	doorTimeoutCh := make(chan bool)
-	RequestTX := make(chan fsm.Order)
-	RXOrderFromPrimCh := make(chan fsm.Order)
-	TXFloorReached := make(chan fsm.Order)
-	RXLightUpdate := make(chan fsm.LightUpdate)
+	RequestToPrimTX := make(chan fsm.Order)
+	OrderFromPrimRX := make(chan fsm.Order)
+	OrderCompletedTX := make(chan fsm.Order)
+	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
 
 	//vi skiller mellom intern komunikasjon og kommunikasjon med primary.
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
@@ -96,120 +103,74 @@ func main() {
 	go pba.Backup(ID)
 	go elevio.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevio.PollFloorSensor(floorReachedCh)
-	go bcast.Transmitter(13057, RequestTX) //starting go routines for network communication with other primary.
-	go bcast.Receiver(13056, RXOrderFromPrimCh)
-	go bcast.Transmitter(13058, TXFloorReached)
+	go bcast.Transmitter(13057, RequestToPrimTX) //starting go routines for network communication with other primary.
+	go bcast.Receiver(13056, OrderFromPrimRX)
+	go bcast.Transmitter(13058, OrderCompletedTX)
 	go bcast.Transmitter(13059, nodeStatusTX)
-	go bcast.Receiver(13060, RXLightUpdate)
+	go bcast.Receiver(13060, LightUpdateFromPrimRX)
 	go peers.Transmitter(12055, ID, peerTX)
 
 	//-----------------------------MAIN LOOP-----------------------------
 	for {
 		select {
 
-		case lights := <-RXLightUpdate: //when light update is received from primary, the node updates its own lights with the newest information.
+		case lights := <-LightUpdateFromPrimRX: //when light update is received from primary, the node updates its own lights with the newest information.
 			if lights.ID == ID {
-				for i := 0; i < fsm.NButtons; i++ {
-					for j := 0; j < fsm.NFloors; j++ {
-						if lights.LightArray[j][i] {
-							elevio.SetButtonLamp(elevio.ButtonType(i), j, true) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
-						} else {
-							elevio.SetButtonLamp(elevio.ButtonType(i), j, false)
-						}
+				for i := range fsm.NButtons {
+					for j := range fsm.NFloors {
+						elevio.SetButtonLamp(elevio.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
+
 					}
 				}
 			}
+
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
 
-			switch btnEvent.Button {
-
-			case elevio.BT_Cab: //Jeg mener vi ikk trenger to caser. Dersom noden er på nett, skal den sende til prim.
-				OrderToPrimary := fsm.Order{ //dersom noden ikke er på nett, vil den tro den er prim, og sende til seg selv. Begge tilfeller bør fungere!
-					ButtonEvent: btnEvent,
-					ID:          ID,
-					TargetID:    fsm.PrimaryID,
-					Orders:      elevator.Input.LocalRequests,
-				}
-				RequestTX <- OrderToPrimary
-				// Hva gjør vi med cab calls når internett er nede. TODO: Implementer ONLINE/OFFLINE//ikke nødvendig. Se ovenfor.
-			default:
-
-				OrderToPrimary := fsm.Order{
-					ButtonEvent: btnEvent,
-					ID:          ID,
-					TargetID:    fsm.PrimaryID,
-					Orders:      elevator.Input.LocalRequests,
-				}
-				RequestTX <- OrderToPrimary
+			OrderToPrimary := fsm.Order{
+				ButtonEvent: btnEvent,
+				ID:          ID,
+				TargetID:    fsm.PrimaryID,
+				Orders:      elevator.Input.LocalRequests,
 			}
+			print("sending request to primary")
+			RequestToPrimTX <- OrderToPrimary
 
-		case a := <-RXOrderFromPrimCh: // I denne casen mottar noden en ordre fra primary.
+			//vi diskuterte om vi trengte å ha egen case for cab. Vi kom frem til at det ikke trengs fordi:
+			//i: Hvis noden har kræsjet, tar vi ikke ordre.
+			//ii: Hvis noden er uten nett, setter den seg selv til primary, den vil dermed ta ordre fra cab selv.
 
-			if a.TargetID != ID { // hvis ordren er til en annen heis, ignorer.
+		case order := <-OrderFromPrimRX: // I denne casen mottar noden en ordre fra primary.
+
+			if order.TargetID != ID { // hvis ordren er til en annen heis, ignorer.
+				//denne kunne også strengt tatt gått inn i handle new Order functionen.
 				continue
 			}
 
-			if a.ButtonEvent.Floor == elevio.GetFloor() && a.TargetID == ID { //hvis vi får en ordre på etasjen vi er på. Åpne dør.
-				//ideelt sett får vi denne logikken bakt inn i en rent logisk "handle new order", og at vi slipper å håndtere spesialtilfellet her.
-				elevator.State = fsm.DoorOpen
-				go startDoorTimer(doorTimeoutCh)
-				elevio.SetDoorOpenLamp(true)
-				continue
+			elevator = fsm.HandleNewOrder(order, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 
-			}
-			//samme gjelder her. Kan vi unngå å håndtere spesiltilfeller her?
-			//mener bestemt det bør være mulig å kunne formulere en handle new order som er dekkende for alle gyldige tilfeller.
-			if fsm.QueueEmpty(elevator.Input.LocalRequests) { //dette vil også fungere når det kommer til å håndtere cab ordre som lastes inn.
-				print("queue empty")
-				elevator.Input.LocalRequests = a.Orders
-				decision := fsm.HandleDoorTimeout(elevator.Input, elevator.Output)
-				elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
-				elevator.Output.MotorDirection = decision.ElevatorOutput.MotorDirection
-			} else {
-				elevator.Input.LocalRequests = a.Orders
-			}
-
-			elevio.SetMotorDirection(elevator.Output.MotorDirection)
-
-			//vi mangler logikk for å håndtere ny ordre når køen ikke er tom!
-
-		case a := <-floorReachedCh: //D
-
-			elevio.SetFloorIndicator(a)
-			prevDirection := elevator.Output.MotorDirection
-			decision := fsm.HandleFloorReached(a, elevator.Input, elevator.Output)
-			elevator.Input.PrevFloor = elevio.GetFloor()
-			elevator.State = decision.NextState
-			elevator.Input.PrevFloor = a
-
-			fmt.Print("før", elevator.Input.LocalRequests)
+			// her må vi tenke over hvordan vi kan håndtere dette tilfellet.
 			if elevator.State == fsm.DoorOpen {
 				go startDoorTimer(doorTimeoutCh)
-				elevio.SetDoorOpenLamp(true)
 			}
-			elevator.Input.LocalRequests = decision.ElevatorOutput.LocalOrders //funksjonen må endres sånn at den returnerer pressed buttons istedet.
-			elevator.Output.MotorDirection = prevDirection
-			fmt.Print("etter", elevator.Input.LocalRequests)
 
-			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection) //vi må i stedet styre lys kun fra primary.
+			setHardwareEffects(elevator)
 
-			// while buttonlight on, spam floor reached. Umulig, ingen funksjon som leser lysene
+		case a := <-floorReachedCh:
+
+			elevator = fsm.HandleFloorReached(a, elevator)
+
+			setHardwareEffects(elevator)
+			if elevator.State == fsm.DoorOpen {
+				go startDoorTimer(doorTimeoutCh)
+			}
 
 		case <-doorTimeoutCh:
-			elevio.SetDoorOpenLamp(false)
-			decision := fsm.HandleDoorTimeout(elevator.Input, elevator.Output)
-			elevator.State = decision.NextState
-			if elevator.State == fsm.DoorOpen {
-				go startDoorTimer(doorTimeoutCh)
-				elevio.SetDoorOpenLamp(true)
-			}
 
-			ArrivalMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Input.LocalRequests}
-			for range 5 {
-				TXFloorReached <- ArrivalMessage
-			}
-			elevio.SetMotorDirection(decision.ElevatorOutput.MotorDirection)
-			elevator.Output.MotorDirection = decision.ElevatorOutput.MotorDirection
+			elevator = fsm.HandleDoorTimeout(elevator)
+
+			setHardwareEffects(elevator)
+
+			OrderCompletedTX <- fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
 
 		case <-statusTicker.C:
 
