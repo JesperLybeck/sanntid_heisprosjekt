@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"unsafe"
 )
 
 var LatestStatusFromPrimary fsm.Status
@@ -31,6 +32,7 @@ func Backup(ID string) {
 						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
 						fsm.PrimaryID = ID
 						fsm.BackupID = p.TransmitterID
+
 					} else if intID < intTransmitterID {
 						println("Min ID mindre")
 						fsm.PrimaryID = p.TransmitterID
@@ -64,16 +66,27 @@ func Backup(ID string) {
 
 			select {
 			case p := <-primaryStatusRX:
+				size := unsafe.Sizeof(p)
+				fmt.Printf("Size of Status struct: %d bytes\n", size)
 
 				LatestStatusFromPrimary = p
+				fsm.StoredOrders = p.Orders
+				fsm.IpToIndexMap = p.Map
+				fsm.Version = p.Version
+				fmt.Print(fsm.IpToIndexMap)
+
 				timeout = time.After(3 * time.Second)
 
 			case <-timeout:
 				fmt.Println("Primary timed out")
+
 				fsm.Version++
+				fsm.PreviousPrimaryID = fsm.PrimaryID
 				fsm.PrimaryID = ID
 				fsm.BackupID = ""
 				isBackup = false
+				fsm.TakeOverInProgress = true
+
 			}
 		}
 	}

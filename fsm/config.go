@@ -6,6 +6,7 @@ const NFloors int = 4
 const NButtons int = 3
 const MElevators int = 3
 
+var TakeOverInProgress bool = false
 var PrimaryID string = ""
 var BackupID string = ""
 var StartingAsPrimary bool = false
@@ -13,6 +14,7 @@ var Version int = 0
 var StoredOrders [NFloors][NButtons][MElevators]bool
 var IpToIndexMap = make(map[string]int)
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
+var PreviousPrimaryID string
 
 type Status struct {
 	TransmitterID string

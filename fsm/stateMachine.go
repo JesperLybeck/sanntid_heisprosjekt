@@ -2,7 +2,7 @@ package fsm
 
 import (
 	"Sanntid/elevio"
-	"fmt"
+	"time"
 )
 
 type ElevatorState int
@@ -15,9 +15,10 @@ const (
 )
 
 type ElevatorOutput struct {
-	MotorDirection elevio.MotorDirection
-	Door           bool
-	LocalOrders    [NFloors][NButtons]bool
+	MotorDirection     elevio.MotorDirection
+	prevMotorDirection elevio.MotorDirection
+	Door               bool
+	LocalOrders        [NFloors][NButtons]bool
 }
 
 type ElevatorInput struct {
@@ -25,9 +26,10 @@ type ElevatorInput struct {
 	PrevFloor     int
 }
 type Elevator struct {
-	State  ElevatorState
-	Input  ElevatorInput
-	Output ElevatorOutput
+	State     ElevatorState
+	Input     ElevatorInput
+	Output    ElevatorOutput
+	DoorTimer *time.Timer
 }
 
 type DirectionStatePair struct {
@@ -36,10 +38,10 @@ type DirectionStatePair struct {
 }
 
 func OrdersAbove(E Elevator) bool {
-	print("checking orders above")
+
 	for i := E.Input.PrevFloor + 1; i < NFloors; i++ {
 		if E.Output.LocalOrders[i][0] || E.Output.LocalOrders[i][1] || E.Output.LocalOrders[i][2] {
-			println("orders above")
+
 			return true
 		}
 	}
@@ -70,14 +72,14 @@ func QueueEmpty(queue [4][3]bool) bool {
 }
 
 func shouldStop(E Elevator) bool {
-	println("checking if should stop")
+
 	switch E.Output.MotorDirection {
 	case elevio.MD_Down:
 		return (E.Output.LocalOrders[E.Input.PrevFloor][elevio.BT_HallDown] ||
 			E.Output.LocalOrders[E.Input.PrevFloor][elevio.BT_Cab] ||
 			!OrdersBelow(E))
 	case elevio.MD_Up:
-		println("elevator going up")
+
 		return (E.Output.LocalOrders[E.Input.PrevFloor][elevio.BT_HallUp] ||
 			E.Output.LocalOrders[E.Input.PrevFloor][elevio.BT_Cab] ||
 			!OrdersAbove(E))
@@ -91,7 +93,7 @@ func shouldStop(E Elevator) bool {
 
 // checking if the order is to be cleared immediately.
 func shouldClearImmediately(E Elevator, btnEvent elevio.ButtonEvent) bool {
-	fmt.Println(E.Input.PrevFloor, " ", btnEvent.Floor, " ", E.Output.MotorDirection, " ", btnEvent.Button)
+
 	return ((E.Input.PrevFloor == btnEvent.Floor) && ((E.Output.MotorDirection == elevio.MD_Up && btnEvent.Button == elevio.BT_HallUp) ||
 		(E.Output.MotorDirection == elevio.MD_Down && btnEvent.Button == elevio.BT_HallDown) ||
 		(E.Output.MotorDirection == elevio.MD_Stop) ||
@@ -100,9 +102,10 @@ func shouldClearImmediately(E Elevator, btnEvent elevio.ButtonEvent) bool {
 }
 
 func clearAtFloor(E Elevator) Elevator {
-	println("clearing at floor")
+
 	nextElevator := E
 	nextElevator.Output.LocalOrders[E.Input.PrevFloor][elevio.BT_Cab] = false
+
 	switch nextElevator.Output.MotorDirection {
 	case elevio.MD_Up:
 		if !OrdersAbove(nextElevator) && !nextElevator.Output.LocalOrders[nextElevator.Input.PrevFloor][elevio.BT_HallUp] {
@@ -117,6 +120,7 @@ func clearAtFloor(E Elevator) Elevator {
 		nextElevator.Output.LocalOrders[nextElevator.Input.PrevFloor][elevio.BT_HallDown] = false
 
 	case elevio.MD_Stop:
+
 		nextElevator.Output.LocalOrders[nextElevator.Input.PrevFloor][elevio.BT_HallUp] = false
 		nextElevator.Output.LocalOrders[nextElevator.Input.PrevFloor][elevio.BT_HallDown] = false
 
@@ -128,7 +132,7 @@ func clearAtFloor(E Elevator) Elevator {
 
 func chooseDirection(E Elevator) DirectionStatePair {
 
-	switch E.Output.MotorDirection {
+	switch E.Output.prevMotorDirection {
 	case elevio.MD_Up:
 
 		if OrdersAbove(E) {
@@ -172,7 +176,7 @@ func chooseDirection(E Elevator) DirectionStatePair {
 }
 
 func HandleNewOrder(order Order, E Elevator) Elevator {
-	print("state at new order: ", E.State)
+
 	nextElevator := E
 	nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = true //legger inn den nye ordren.
 
@@ -181,45 +185,57 @@ func HandleNewOrder(order Order, E Elevator) Elevator {
 	switch nextElevator.State {
 	case DoorOpen:
 		if shouldClearImmediately(nextElevator, order.ButtonEvent) {
-			print("should clear immediately")
-			nextElevator.Output.Door = true
+
 			nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = false
 			nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][elevio.BT_Cab] = false
 			nextElevator.Output.MotorDirection = elevio.MD_Stop
 			nextElevator.State = DoorOpen
+			nextElevator.Output.Door = true
+			nextElevator.DoorTimer.Reset(3 * time.Second)
+
 			break
 		}
 
 	case Idle:
-		println("idle at new order")
+
+		nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
 		DirectionStatePair := chooseDirection(nextElevator)
+		if DirectionStatePair.State == DoorOpen {
+			nextElevator.Output.Door = true
+			nextElevator.DoorTimer.Reset(3 * time.Second)
+			nextElevator = clearAtFloor(nextElevator)
+		}
 
 		nextElevator.Output.MotorDirection = DirectionStatePair.Direction
 		nextElevator.State = DirectionStatePair.State
 
 	}
 
-	print("state after new order: ", nextElevator.State)
 	return nextElevator
 
 }
 
 func HandleFloorReached(event int, E Elevator) Elevator {
+
+	model := E
+	model.Input.PrevFloor = event
 	nextElevator := E
 	nextElevator.Input.PrevFloor = event
 	switch nextElevator.State {
 	case MovingBetweenFloors:
-		println("moving between floors")
+
 		if shouldStop(nextElevator) {
-			println("should stop")
+
+			nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
+			nextElevator = clearAtFloor(nextElevator)
 			nextElevator.Output.MotorDirection = elevio.MD_Stop
 			nextElevator.Output.Door = true
-			nextElevator = clearAtFloor(nextElevator)
+			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator.State = DoorOpen
 		}
 
 	}
-	print("direction at floor reached: ", nextElevator.Output.MotorDirection)
+
 	return nextElevator
 
 }
@@ -228,17 +244,21 @@ func HandleDoorTimeout(E Elevator) Elevator {
 	nextElevator := E
 	switch nextElevator.State {
 	case DoorOpen:
+
 		DirectionStatePair := chooseDirection(nextElevator)
 		nextElevator.Output.MotorDirection = DirectionStatePair.Direction
 		nextElevator.State = DirectionStatePair.State
 		switch nextElevator.State {
 		case DoorOpen:
 			nextElevator = clearAtFloor(nextElevator)
+			//men door open til door open):
 		case Idle:
 			nextElevator.Output.Door = false
 			nextElevator.Output.MotorDirection = DirectionStatePair.Direction
+		case MovingBetweenFloors:
+			nextElevator.Output.Door = false
 		}
 	}
-	println("state after door timeout", nextElevator.State)
+
 	return nextElevator
 }

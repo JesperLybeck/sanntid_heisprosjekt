@@ -12,12 +12,6 @@ import (
 )
 
 // ------------------------------Utility functions--------------------------------
-func startDoorTimer(doorTimeout chan<- bool) {
-
-	time.AfterFunc(3*time.Second, func() {
-		doorTimeout <- true
-	})
-}
 
 func setHardwareEffects(E fsm.Elevator) {
 	elevio.SetMotorDirection(E.Output.MotorDirection)
@@ -36,13 +30,14 @@ func main() {
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
 	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
-	buttonPressCh := make(chan elevio.ButtonEvent)
-	floorReachedCh := make(chan int)
-	doorTimeoutCh := make(chan bool)
 	RequestToPrimTX := make(chan fsm.Order)
 	OrderFromPrimRX := make(chan fsm.Order)
 	OrderCompletedTX := make(chan fsm.Order)
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
+
+	buttonPressCh := make(chan elevio.ButtonEvent)
+	floorReachedCh := make(chan int)
+	//doorTimeoutCh := make(chan bool)
 
 	//vi skiller mellom intern komunikasjon og kommunikasjon med primary.
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
@@ -97,7 +92,8 @@ func main() {
 	elevator.Input.PrevFloor = elevio.GetFloor()
 	elevator.Output.MotorDirection = elevio.MD_Stop
 	elevio.SetMotorDirection(elevator.Output.MotorDirection)
-
+	elevator.DoorTimer = time.NewTimer(3 * time.Second)
+	elevator.DoorTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.Primary(ID) //starting go routines for primary and backup.
 	go pba.Backup(ID)
@@ -126,14 +122,14 @@ func main() {
 
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
 
-			OrderToPrimary := fsm.Order{
+			requestToPrimary := fsm.Order{
 				ButtonEvent: btnEvent,
 				ID:          ID,
 				TargetID:    fsm.PrimaryID,
 				Orders:      elevator.Input.LocalRequests,
 			}
-			print("sending request to primary")
-			RequestToPrimTX <- OrderToPrimary
+
+			RequestToPrimTX <- requestToPrimary
 
 			//vi diskuterte om vi trengte å ha egen case for cab. Vi kom frem til at det ikke trengs fordi:
 			//i: Hvis noden har kræsjet, tar vi ikke ordre.
@@ -145,13 +141,9 @@ func main() {
 				//denne kunne også strengt tatt gått inn i handle new Order functionen.
 				continue
 			}
+			print("Received order from primary: ")
 
 			elevator = fsm.HandleNewOrder(order, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
-
-			// her må vi tenke over hvordan vi kan håndtere dette tilfellet.
-			if elevator.State == fsm.DoorOpen {
-				go startDoorTimer(doorTimeoutCh)
-			}
 
 			setHardwareEffects(elevator)
 
@@ -160,18 +152,16 @@ func main() {
 			elevator = fsm.HandleFloorReached(a, elevator)
 
 			setHardwareEffects(elevator)
-			if elevator.State == fsm.DoorOpen {
-				go startDoorTimer(doorTimeoutCh)
-			}
 
-		case <-doorTimeoutCh:
+		case <-elevator.DoorTimer.C:
 
 			elevator = fsm.HandleDoorTimeout(elevator)
 
 			setHardwareEffects(elevator)
 
-			OrderCompletedTX <- fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
+			orderMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
 
+			OrderCompletedTX <- orderMessage
 		case <-statusTicker.C:
 
 			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: elevator.Output.MotorDirection}
