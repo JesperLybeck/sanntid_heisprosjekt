@@ -2,6 +2,7 @@ package pba
 
 import (
 	"Network-go/network/bcast"
+	"Network-go/network/peers"
 	"Sanntid/fsm"
 	"fmt"
 	"strconv"
@@ -20,12 +21,14 @@ func Backup(ID string) {
 		if !isBackup {
 			select {
 			case p := <-primaryStatusRX:
+				//fmt.Println("Backup received from primary")
 
 				if fsm.PrimaryID == ID && p.TransmitterID != ID {
 					intID, _ := strconv.Atoi(ID[len(ID)-2:])
 					intTransmitterID, _ := strconv.Atoi(p.TransmitterID[len(ID)-2:])
 					//Her mottar en primary melding fra en annen primary
 					print("MyID", intID, "Transmitter", intTransmitterID)
+					fsm.LatestPeerList = p.Peerlist
 					if intID > intTransmitterID {
 						println("Min ID større")
 						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
@@ -59,7 +62,6 @@ func Backup(ID string) {
 
 			}
 		}
-		time.Sleep(500 * time.Millisecond)
 
 		if fsm.BackupID == ID {
 
@@ -70,13 +72,14 @@ func Backup(ID string) {
 				fsm.StoredOrders = p.Orders
 				fsm.IpToIndexMap = p.Map
 				fsm.Version = p.Version
-				fmt.Print(fsm.IpToIndexMap)
+				fsm.LatestPeerList = p.Peerlist
 
 				timeout = time.After(3 * time.Second)
 
 			case <-timeout:
 				fmt.Println("Primary timed out")
-
+				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
+				fmt.Println("New peerlist", fsm.LatestPeerList)
 				fsm.Version++
 				fsm.PreviousPrimaryID = fsm.PrimaryID
 				fsm.PrimaryID = ID
@@ -103,4 +106,26 @@ func mergeOrders(orders1 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orders
 		}
 	}
 	return mergedOrders
+}
+
+func removeFromActivePeers(ID string, peerlist peers.PeerUpdate) peers.PeerUpdate {
+	fmt.Print("Id to remove", ID, "Peerlist", peerlist)
+	newPeerList := make([]string, 0)
+	lostPeers := make([]string, 0)
+	for i := 0; i < len(peerlist.Peers); i++ {
+		if peerlist.Peers[i] != ID {
+			print("Adding", peerlist.Peers[i])
+			newPeerList = append(newPeerList, peerlist.Peers[i]) //kopierer over alle noder som ikke skal fjernes i new peer list
+		} else {
+			lostPeers = append(lostPeers, peerlist.Peers[i])
+
+		}
+		for i := 0; i < len(peerlist.Lost); i++ {
+			print("Adding to lost", peerlist.Lost[i])
+			lostPeers = append(lostPeers, peerlist.Lost[i]) //kopierer over de andre på lost peers
+		}
+
+	}
+	return peers.PeerUpdate{Peers: newPeerList, Lost: lostPeers, New: peerlist.New}
+
 }

@@ -44,7 +44,7 @@ func main() {
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
-	statusTicker := time.NewTicker(2 * time.Second)
+	statusTicker := time.NewTicker(200 * time.Millisecond)
 
 	//------------------------ASSIGNING ENVIRONMENT VARIABLES------------------------
 	ID = os.Getenv("ID")
@@ -76,8 +76,15 @@ func main() {
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevio.Init(elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
-	elevio.SetMotorDirection(elevio.MD_Up)
 
+	for {
+		elevio.SetMotorDirection(elevio.MD_Up)
+		if elevio.GetFloor() != -1 {
+			elevio.SetMotorDirection(elevio.MD_Stop)
+			break
+		}
+		time.Sleep(10 * time.Millisecond) // Add small delay between polls
+	}
 	for j := 0; j < 4; j++ {
 		elevio.SetButtonLamp(elevio.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
 		elevio.SetButtonLamp(elevio.BT_HallDown, j, false)
@@ -94,7 +101,7 @@ func main() {
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.Primary(ID) //starting go routines for primary and backup.
 	go pba.Backup(ID)
-	
+
 	go elevio.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevio.PollFloorSensor(floorReachedCh)
 	go bcast.Transmitter(13057, RequestToPrimTX) //starting go routines for network communication with other primary.

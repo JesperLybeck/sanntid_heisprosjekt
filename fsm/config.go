@@ -1,6 +1,9 @@
 package fsm
 
-import "Sanntid/elevio"
+import (
+	"Network-go/network/peers"
+	"Sanntid/elevio"
+)
 
 const NFloors int = 4
 const NButtons int = 3
@@ -13,6 +16,7 @@ var StartingAsPrimary bool = false
 var Version int = 0
 var StoredOrders [MElevators][NFloors][NButtons]bool
 var IpToIndexMap = make(map[string]int)
+var LatestPeerList peers.PeerUpdate
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
 var PreviousPrimaryID string
 
@@ -22,6 +26,7 @@ type Status struct {
 	Orders        [MElevators][NFloors][NButtons]bool
 	Version       int
 	Map           map[string]int
+	Peerlist	  peers.PeerUpdate
 }
 
 type Order struct {
