@@ -93,10 +93,11 @@ func Backup(ID string) {
 
 }
 
-func mergeOrders(orders1 [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool, orders2 [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool) [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool {
-	var mergedOrders [fsm.NFloors][fsm.NButtons][fsm.MElevators]bool
+func mergeOrders(orders1 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orders2 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
+	var mergedOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool
+
 	for i := 0; i < fsm.NFloors; i++ {
-		for j := 0; j < fsm.NButtons; j++ {
+		for j := 0; j < fsm.NButtons-1; j++ {
 			for k := 0; k < fsm.MElevators; k++ {
 				if orders1[i][j][k] || orders2[i][j][k] {
 					mergedOrders[i][j][k] = true

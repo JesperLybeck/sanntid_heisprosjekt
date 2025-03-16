@@ -11,7 +11,7 @@ var PrimaryID string = ""
 var BackupID string = ""
 var StartingAsPrimary bool = false
 var Version int = 0
-var StoredOrders [NFloors][NButtons][MElevators]bool
+var StoredOrders [MElevators][NFloors][NButtons]bool
 var IpToIndexMap = make(map[string]int)
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
 var PreviousPrimaryID string
@@ -19,7 +19,7 @@ var PreviousPrimaryID string
 type Status struct {
 	TransmitterID string
 	ReceiverID    string
-	Orders        [NFloors][NButtons][MElevators]bool
+	Orders        [MElevators][NFloors][NButtons]bool
 	Version       int
 	Map           map[string]int
 }
@@ -28,7 +28,7 @@ type Order struct {
 	ButtonEvent elevio.ButtonEvent
 	ID          string
 	TargetID    string
-	Orders      [NFloors][3]bool
+	Orders      [NFloors][NButtons]bool
 }
 type SingleElevatorStatus struct {
 	ID             string

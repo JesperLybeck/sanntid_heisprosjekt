@@ -250,6 +250,8 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		nextElevator.State = DirectionStatePair.State
 		switch nextElevator.State {
 		case DoorOpen:
+			nextElevator.Output.Door = true
+			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator = clearAtFloor(nextElevator)
 			//men door open til door open):
 		case Idle:

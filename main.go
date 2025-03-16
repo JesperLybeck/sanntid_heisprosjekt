@@ -7,6 +7,7 @@ import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
+	"fmt"
 	"os"
 	"time"
 )
@@ -75,9 +76,7 @@ func main() {
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevio.Init(elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
-	for elevio.GetFloor() == -1 {
-		elevio.SetMotorDirection(elevio.MD_Up)
-	}
+	elevio.SetMotorDirection(elevio.MD_Up)
 
 	for j := 0; j < 4; j++ {
 		elevio.SetButtonLamp(elevio.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
@@ -90,8 +89,6 @@ func main() {
 	elevator.Output.LocalOrders = [fsm.NFloors][fsm.NButtons]bool{}
 	elevator.Output.Door = false
 	elevator.Input.PrevFloor = elevio.GetFloor()
-	elevator.Output.MotorDirection = elevio.MD_Stop
-	elevio.SetMotorDirection(elevator.Output.MotorDirection)
 	elevator.DoorTimer = time.NewTimer(3 * time.Second)
 	elevator.DoorTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
@@ -110,7 +107,8 @@ func main() {
 	for {
 		select {
 
-		case lights := <-LightUpdateFromPrimRX: //when light update is received from primary, the node updates its own lights with the newest information.
+		case lights := <-LightUpdateFromPrimRX:
+			//when light update is received from primary, the node updates its own lights with the newest information.
 			if lights.ID == ID {
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
@@ -130,6 +128,7 @@ func main() {
 			}
 
 			RequestToPrimTX <- requestToPrimary
+			fmt.Println("Sent order to primary: ", requestToPrimary)
 
 			//vi diskuterte om vi trengte å ha egen case for cab. Vi kom frem til at det ikke trengs fordi:
 			//i: Hvis noden har kræsjet, tar vi ikke ordre.
