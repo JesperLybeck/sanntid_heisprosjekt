@@ -94,6 +94,7 @@ func main() {
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.Primary(ID) //starting go routines for primary and backup.
 	go pba.Backup(ID)
+	
 	go elevio.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevio.PollFloorSensor(floorReachedCh)
 	go bcast.Transmitter(13057, RequestToPrimTX) //starting go routines for network communication with other primary.

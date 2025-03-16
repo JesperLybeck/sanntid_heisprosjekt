@@ -234,8 +234,9 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 				lostOrder.TargetID = responsibleElevator
 				fmt.Print("lost order: ", lostOrder)
 				orderTX <- lostOrder
+				print("responsible elevator: ", responsibleElevator)
 				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
-				distributedOrders[i][j][responsibleElevatorIndex] = true
+				distributedOrders[responsibleElevatorIndex][i][j] = true
 
 			}
 		}

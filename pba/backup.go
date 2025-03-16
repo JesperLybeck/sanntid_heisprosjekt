@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-	"unsafe"
 )
 
 var LatestStatusFromPrimary fsm.Status
@@ -66,8 +65,6 @@ func Backup(ID string) {
 
 			select {
 			case p := <-primaryStatusRX:
-				size := unsafe.Sizeof(p)
-				fmt.Printf("Size of Status struct: %d bytes\n", size)
 
 				LatestStatusFromPrimary = p
 				fsm.StoredOrders = p.Orders
