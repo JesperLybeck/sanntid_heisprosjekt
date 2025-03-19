@@ -3,6 +3,7 @@ package fsm
 import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
+	"time"
 )
 
 const NFloors int = 4
@@ -19,6 +20,7 @@ var IpToIndexMap = make(map[string]int)
 var LatestPeerList peers.PeerUpdate
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
 var PreviousPrimaryID string
+var OrderTimeout time.Duration = 7
 
 type Status struct {
 	TransmitterID string
@@ -26,7 +28,7 @@ type Status struct {
 	Orders        [MElevators][NFloors][NButtons]bool
 	Version       int
 	Map           map[string]int
-	Peerlist	  peers.PeerUpdate
+	Peerlist      peers.PeerUpdate
 }
 
 type Order struct {

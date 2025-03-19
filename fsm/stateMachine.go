@@ -26,10 +26,12 @@ type ElevatorInput struct {
 	PrevFloor     int
 }
 type Elevator struct {
-	State     ElevatorState
-	Input     ElevatorInput
-	Output    ElevatorOutput
-	DoorTimer *time.Timer
+	State              ElevatorState
+	Input              ElevatorInput
+	Output             ElevatorOutput
+	DoorTimer          *time.Timer
+	OrderCompleteTimer *time.Timer
+	DoorObstructed     bool
 }
 
 type DirectionStatePair struct {
@@ -176,7 +178,7 @@ func chooseDirection(E Elevator) DirectionStatePair {
 }
 
 func HandleNewOrder(order Order, E Elevator) Elevator {
-
+	wasIdleAtNewOrder := E.State == Idle
 	nextElevator := E
 	nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = true //legger inn den nye ordren.
 
@@ -210,7 +212,11 @@ func HandleNewOrder(order Order, E Elevator) Elevator {
 		nextElevator.State = DirectionStatePair.State
 
 	}
-
+	if nextElevator.Output.MotorDirection != elevio.MD_Stop && wasIdleAtNewOrder {
+		print("resetting order complete timer")
+		nextElevator.OrderCompleteTimer.Stop() // Stop before reset to ensure clean state
+		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
+	}
 	return nextElevator
 
 }
@@ -230,9 +236,12 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 			nextElevator = clearAtFloor(nextElevator)
 			nextElevator.Output.MotorDirection = elevio.MD_Stop
 			nextElevator.Output.Door = true
+
 			nextElevator.DoorTimer.Reset(3 * time.Second)
+
 			nextElevator.State = DoorOpen
 		}
+		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
 
 	}
 
@@ -241,6 +250,7 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 }
 
 func HandleDoorTimeout(E Elevator) Elevator {
+	print("handle door timeout")
 	nextElevator := E
 	switch nextElevator.State {
 	case DoorOpen:
@@ -260,6 +270,17 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		case MovingBetweenFloors:
 			nextElevator.Output.Door = false
 		}
+	}
+	if nextElevator.Output.MotorDirection != elevio.MD_Stop {
+		print("resetting order complete timer")
+		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
+	}
+	if nextElevator.State != DoorOpen && nextElevator.DoorObstructed {
+		print("door obstructed")
+		nextElevator.Output.Door = true
+		nextElevator.State = DoorOpen
+		nextElevator.DoorTimer.Reset(4 * time.Second)
+		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
 	}
 
 	return nextElevator

@@ -69,13 +69,13 @@ func main() {
 
 	elevioPortNumber = os.Getenv("PORT") // Read the environment variable
 	if elevioPortNumber == "" {
-		elevioPortNumber = "localhost:15657" // Default value if the environment variable is not set
+		elevioPortNumber = "15657" // Default value if the environment variable is not set
 	}
 	//-----------------------------STATE MACHINE VARIABLES-----------------------------
 	var elevator fsm.Elevator
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
-	elevio.Init(elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
+	elevio.Init("localhost:"+elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
 
 	for {
 		elevio.SetMotorDirection(elevio.MD_Up)
@@ -83,7 +83,7 @@ func main() {
 			elevio.SetMotorDirection(elevio.MD_Stop)
 			break
 		}
-		time.Sleep(10 * time.Millisecond) // Add small delay between polls
+		time.Sleep(fsm.OrderTimeout * time.Millisecond) // Add small delay between polls
 	}
 	for j := 0; j < 4; j++ {
 		elevio.SetButtonLamp(elevio.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
@@ -97,7 +97,9 @@ func main() {
 	elevator.Output.Door = false
 	elevator.Input.PrevFloor = elevio.GetFloor()
 	elevator.DoorTimer = time.NewTimer(3 * time.Second)
+	elevator.OrderCompleteTimer = time.NewTimer(fsm.OrderTimeout * time.Second)
 	elevator.DoorTimer.Stop()
+	elevator.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.Primary(ID) //starting go routines for primary and backup.
 	go pba.Backup(ID)
@@ -161,18 +163,23 @@ func main() {
 			setHardwareEffects(elevator)
 
 		case <-elevator.DoorTimer.C:
-
+			elevator.DoorObstructed = elevio.GetObstruction()
 			elevator = fsm.HandleDoorTimeout(elevator)
 
 			setHardwareEffects(elevator)
 
 			orderMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
-
+			elevator.OrderCompleteTimer.Stop()
 			OrderCompletedTX <- orderMessage
+		case <-elevator.OrderCompleteTimer.C:
+			print("Node failed to complete order. throwing panic")
+			panic("Node failed to complete order, possible engine failure or faulty sensor")
 		case <-statusTicker.C:
 
 			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: elevator.Output.MotorDirection}
+
 		}
+
 	}
 
 }
