@@ -21,6 +21,7 @@ var LatestPeerList peers.PeerUpdate
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
 var PreviousPrimaryID string
 var OrderTimeout time.Duration = 7
+var AloneOnNetwork bool = false
 
 type Status struct {
 	TransmitterID string

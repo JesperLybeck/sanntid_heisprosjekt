@@ -13,6 +13,9 @@ func Primary(ID string) {
 
 	for {
 		if ID == fsm.PrimaryID {
+
+			//TODO, PASS CHANNELS I GOROUTINES
+
 			println("Primary", ID)
 			statusTX := make(chan fsm.Status)
 			orderTX := make(chan fsm.Order)
@@ -50,6 +53,7 @@ func Primary(ID string) {
 
 						updateNodeMap(nodeUpdate.ID, nodeUpdate)
 					case p := <-peersRX:
+						fsm.AloneOnNetwork = false
 						fsm.LatestPeerList = p
 						fmt.Println(fsm.LatestPeerList.Lost)
 						if fsm.BackupID == "" && len(p.Peers) > 1 {
@@ -59,6 +63,8 @@ func Primary(ID string) {
 								}
 							}
 						}
+						fmt.Println(p.Peers)
+	
 						if string(p.New) != "" {
 							index, exists := getOrAssignIndex(string(p.New))
 
@@ -104,7 +110,7 @@ func Primary(ID string) {
 
 					case <-ticker.C:
 						//sending status to backup
-
+						fmt.Println("I am Primary")
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
 						//periodic light update to nodes.
 

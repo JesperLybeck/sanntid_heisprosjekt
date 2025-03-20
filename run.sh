@@ -1,12 +1,13 @@
 #!/bin/bash
 
-# Ensure the script has execute permissions
-chmod +x "$0"
+
 
 # Set the variables
-nodeID="1"
-PORT=16001
+nodeID="11"
+PORT=15657
 STARTASPRIM=true
+LASTNUMBER=${PORT: -1}
+go build -o "elevator_${LASTNUMBER}" main.go
 
 # Check if Go is installed
 if ! command -v go &> /dev/null
@@ -18,16 +19,16 @@ fi
 # Function to start SimElevatorServer
 start_sim_elevator_server() {
     echo "Starting SimElevatorServer..."
-    gnome-terminal -- bash -c "simelevatorserver --port=$PORT; read" &
-    #gnome-terminal -- bash -c "elevatorserver; read" &
+    #gnome-terminal -- bash -c "simelevatorserver --port=$PORT; exec bash" &
+    gnome-terminal -- bash -c "elevatorserver; exec bash" &
 }
 
 # Function to start processSupervisor
 start_process_supervisor() {
     echo "Starting processSupervisor..."
-    gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; read" &
-    #gnome-terminal -- bash -c "env ID=$nodeID STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; read" &
-}   
+    #gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
+    gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
+}
 
 # Start the SimElevatorServer
 start_sim_elevator_server

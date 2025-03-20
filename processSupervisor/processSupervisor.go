@@ -1,67 +1,69 @@
 package main
 
 import (
-	"Network-go/network/bcast"
-	"Network-go/network/localip"
-	"Sanntid/fsm"
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
 )
 
+
 func main() {
-	print("supervisor running")
-	nodeID := os.Getenv("ID")
-	if nodeID == "" {
-		localIP, err := localip.LocalIP()
-		if err != nil {
-			localIP = "DISCONNECTED"
-		}
-		nodeID = localIP
-	}
+port := os.Getenv("PORT")
+nodeID := os.Getenv("ID")
+startingAsPrimaryEnv := os.Getenv("STARTASPRIM")
+fmt.Print("port ", port, "ID", nodeID, "STARTASPRIM", startingAsPrimaryEnv)
 
-	elevioPortNumber := os.Getenv("PORT") // Read the environment variable
-	if elevioPortNumber == "" {
-		elevioPortNumber = "15657" // Default value if the environment variable is not set
-	}
+    aliveTimer := time.NewTimer(4*time.Second)
+    aliveChannel := make(chan bool)
+    lastDigit := string(port[len(port)-1])
+    go processAlive(aliveChannel, "elevator_"+lastDigit)
+for{
+    select {
+        case <- aliveChannel:
+            aliveTimer.Reset(4*time.Second)
 
-	StartingAsPrimaryEnv := os.Getenv("STARTASPRIM")
-
-	aliveSignalRX := make(chan fsm.SingleElevatorStatus)
-	go bcast.Receiver(13059, aliveSignalRX)
-	timer := time.NewTimer(8 * time.Second)
-
-	print("NodeID: ", nodeID)
-	print("Port: ", elevioPortNumber)
-	print("Starting as primary: ", StartingAsPrimaryEnv)
-
-	for {
-		select {
-		case status := <-aliveSignalRX:
-			if status.ID == nodeID {
-				timer.Reset(8 * time.Second)
-
-			}
-
-		case <-timer.C:
-			runMainInParentDirectory(elevioPortNumber, nodeID, StartingAsPrimaryEnv)
-
-			timer.Reset(8 * time.Second)
-			print("Restarting main")
-		}
-	}
+        case <-aliveTimer.C:
+            reviveProcess(port, nodeID, startingAsPrimaryEnv)
+            aliveTimer.Reset(4*time.Second)
+        }
+    }
 }
 
-func runMainInParentDirectory(port string, nodeID string, startasprim string) {
-	envVars := fmt.Sprintf("PORT=%s ID=%s STARTASPRIM=%s", port, nodeID, startasprim)
 
-	// Create command that will exit when the process ends
-	cmd := exec.Command("gnome-terminal", "--", "bash", "-c",
-		fmt.Sprintf("%s exec go run main.go", envVars))
-	err := cmd.Start()
-	if err != nil {
-		print("Error starting main.go:", err)
-	}
 
+func processAlive(aliveChannel chan bool,processName string) {
+   
+    for {
+        cmd := exec.Command("pgrep", processName)
+        err := cmd.Run()
+        if err == nil {
+            print("process alive")
+            aliveChannel <- true
+            
+            
+        }else {
+            print("process ", processName, " is dead")
+        }
+
+        time.Sleep(1*time.Second)
+            
+        
+
+
+
+    }
+}
+
+func reviveProcess(port string, nodeID string, startingAsPrimaryEnv string) {  
+    lastDigit := string(port[len(port)-1]) // Extract the last digit of the port
+    processName := "./elevator_" + lastDigit // Construct the process name dynamically
+    cmd := exec.Command("gnome-terminal", "--", "bash", "-c", processName+"; exec bash")
+    cmd.Env = append(os.Environ(), "PORT="+port, "ID="+nodeID, "STARTASPRIM="+startingAsPrimaryEnv)
+    err := cmd.Start()
+    if err != nil {
+        print("Error starting process:", err)
+    } else {
+        print("Revived process:", processName)
+    }
 }

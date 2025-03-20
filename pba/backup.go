@@ -67,7 +67,7 @@ func Backup(ID string) {
 
 			select {
 			case p := <-primaryStatusRX:
-
+				fmt.Println("I am Backup")
 				LatestStatusFromPrimary = p
 				fsm.StoredOrders = p.Orders
 				fsm.IpToIndexMap = p.Map
@@ -99,8 +99,8 @@ func mergeOrders(orders1 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orders
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons-1; j++ {
 			for k := 0; k < fsm.MElevators; k++ {
-				if orders1[i][j][k] || orders2[i][j][k] {
-					mergedOrders[i][j][k] = true
+				if orders1[k][i][j] || orders2[k][i][j] {
+					mergedOrders[k][i][j] = true
 				}
 			}
 		}

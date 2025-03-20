@@ -35,6 +35,7 @@ func main() {
 	OrderFromPrimRX := make(chan fsm.Order)
 	OrderCompletedTX := make(chan fsm.Order)
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
+	peersRX := make(chan peers.PeerUpdate)
 
 	buttonPressCh := make(chan elevio.ButtonEvent)
 	floorReachedCh := make(chan int)
@@ -112,11 +113,16 @@ func main() {
 	go bcast.Transmitter(13059, nodeStatusTX)
 	go bcast.Receiver(13060, LightUpdateFromPrimRX)
 	go peers.Transmitter(12055, ID, peerTX)
+	go peers.Receiver(12055, peersRX)
 
 	//-----------------------------MAIN LOOP-----------------------------
 	for {
 		select {
-
+		case p := <-peersRX:
+			// To register if alone on network and enter offline mode
+			if len(p.Peers) == 0 {
+				fsm.AloneOnNetwork = true
+			}
 		case lights := <-LightUpdateFromPrimRX:
 			//when light update is received from primary, the node updates its own lights with the newest information.
 			if lights.ID == ID {
@@ -137,8 +143,17 @@ func main() {
 				Orders:      elevator.Input.LocalRequests,
 			}
 
+
 			RequestToPrimTX <- requestToPrimary
 			fmt.Println("Sent order to primary: ", requestToPrimary)
+			
+
+			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
+				
+				elevator = fsm.HandleNewOrder(requestToPrimary, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
+				elevio.SetButtonLamp(elevio.BT_Cab, btnEvent.Floor, true)
+				setHardwareEffects(elevator)
+			}
 
 			//vi diskuterte om vi trengte å ha egen case for cab. Vi kom frem til at det ikke trengs fordi:
 			//i: Hvis noden har kræsjet, tar vi ikke ordre.
@@ -157,10 +172,15 @@ func main() {
 			setHardwareEffects(elevator)
 
 		case a := <-floorReachedCh:
-
+	
 			elevator = fsm.HandleFloorReached(a, elevator)
 
 			setHardwareEffects(elevator)
+
+			if fsm.AloneOnNetwork {
+				elevio.SetButtonLamp(elevio.BT_Cab, a, false)
+			}
+
 
 		case <-elevator.DoorTimer.C:
 			elevator.DoorObstructed = elevio.GetObstruction()
