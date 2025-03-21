@@ -11,14 +11,11 @@ import (
 
 var LatestStatusFromPrimary fsm.Status
 
-func Backup(ID string) {
-	var timeout = time.After(3 * time.Second) // Set timeout duration
+func StatusReciever(ID string) {
 	var primaryStatusRX = make(chan fsm.Status)
 	go bcast.Receiver(13055, primaryStatusRX)
-	LatestStatusFromPrimary := fsm.Status{}
-	isBackup := false
 	for {
-		if !isBackup {
+		if fsm.BackupID != ID {
 			select {
 			case p := <-primaryStatusRX:
 				//fmt.Println("Backup received from primary")
@@ -50,18 +47,19 @@ func Backup(ID string) {
 						fsm.BackupID = ID
 						isBackup = true
 					}
-
-					timeout = time.After(3 * time.Second)
-				} /* else if p.Version > fsm.Version {
-					fmt.Println("Primary version higher. accepting new primary")
-					fsm.Version = p.Version
-					fsm.PrimaryID = p.TransmitterID
-					timeout = time.After(3 * time.Second)
-
-				}*/
+				} 
 
 			}
 		}
+}
+}
+
+func Backup(ID string) {
+	var timeout = time.After(3 * time.Second) // Set timeout duration
+	var LatestStatusFromPrimary = fsm.Status{}
+	var primaryStatusRX = make(chan fsm.Status)
+	go bcast.Receiver(13055, primaryStatusRX)
+	for {
 
 		if fsm.BackupID == ID {
 
@@ -84,7 +82,7 @@ func Backup(ID string) {
 				fsm.PreviousPrimaryID = fsm.PrimaryID
 				fsm.PrimaryID = ID
 				fsm.BackupID = ""
-				isBackup = false
+				
 				fsm.TakeOverInProgress = true
 
 			}
