@@ -3,89 +3,78 @@ package pba
 import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
-	"Sanntid/fsm"
+	"Sanntid/config"
 	"fmt"
 	"strconv"
 	"time"
 )
 
-var LatestStatusFromPrimary fsm.Status
+var LatestStatusFromPrimary config.Status
 
-func Backup(ID string) {
-	var timeout = time.After(3 * time.Second) // Set timeout duration
-	var primaryStatusRX = make(chan fsm.Status)
+
+
+func StatusReciever(ID string, primaryStatusRX chan config.Status) {
 	go bcast.Receiver(13055, primaryStatusRX)
-	LatestStatusFromPrimary := fsm.Status{}
-	isBackup := false
 	for {
-		if !isBackup {
+		if config.BackupID != ID {
 			select {
 			case p := <-primaryStatusRX:
-				//fmt.Println("Backup received from primary")
 
-				if fsm.PrimaryID == ID && p.TransmitterID != ID {
+				if config.PrimaryID == ID && p.TransmitterID != ID {
 					intID, _ := strconv.Atoi(ID[len(ID)-2:])
 					intTransmitterID, _ := strconv.Atoi(p.TransmitterID[len(ID)-2:])
 					//Her mottar en primary melding fra en annen primary
 					print("MyID", intID, "Transmitter", intTransmitterID)
-					fsm.LatestPeerList = p.Peerlist
+					config.LatestPeerList = p.Peerlist
 					if intID > intTransmitterID {
 						println("Min ID større")
-						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
-						fsm.PrimaryID = ID
-						fsm.BackupID = p.TransmitterID
+						config.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
+						config.PrimaryID = ID
+						config.BackupID = p.TransmitterID
 
 					} else if intID < intTransmitterID {
 						println("Min ID mindre")
-						fsm.PrimaryID = p.TransmitterID
-						fsm.BackupID = ""
+						config.PrimaryID = p.TransmitterID
+						config.BackupID = ""
 					}
 
 				} else {
 
 					if p.TransmitterID != ID {
-						fsm.PrimaryID = p.TransmitterID
+						config.PrimaryID = p.TransmitterID
+						config.BackupID = p.ReceiverID
 					}
-					if p.ReceiverID == ID {
-						fsm.BackupID = ID
-						isBackup = true
-					}
-
-					timeout = time.After(3 * time.Second)
-				} /* else if p.Version > fsm.Version {
-					fmt.Println("Primary version higher. accepting new primary")
-					fsm.Version = p.Version
-					fsm.PrimaryID = p.TransmitterID
-					timeout = time.After(3 * time.Second)
-
-				}*/
-
+				}
 			}
 		}
+	}
+}
+func Backup(ID string, primaryStatusRX chan config.Status) {
+	go bcast.Receiver(13055, primaryStatusRX)
+	timeout := time.After(3 * time.Second)
 
-		if fsm.BackupID == ID {
+	for {
 
+		if config.BackupID == ID {
 			select {
 			case p := <-primaryStatusRX:
 				fmt.Println("I am Backup")
 				LatestStatusFromPrimary = p
-				fsm.StoredOrders = p.Orders
-				fsm.IpToIndexMap = p.Map
-				fsm.Version = p.Version
-				fsm.LatestPeerList = p.Peerlist
-
+				config.StoredOrders = p.Orders
+				config.IpToIndexMap = p.Map
+				config.Version = p.Version
+				config.LatestPeerList = p.Peerlist
 				timeout = time.After(3 * time.Second)
 
 			case <-timeout:
 				fmt.Println("Primary timed out")
-				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
-				fmt.Println("New peerlist", fsm.LatestPeerList)
-				fsm.Version++
-				fsm.PreviousPrimaryID = fsm.PrimaryID
-				fsm.PrimaryID = ID
-				fsm.BackupID = ""
-				isBackup = false
-				fsm.TakeOverInProgress = true
+				config.LatestPeerList = removeFromActivePeers(config.PrimaryID, config.LatestPeerList)
+				fmt.Println("New peerlist", config.LatestPeerList)
+				config.Version++
+				config.PreviousPrimaryID = config.PrimaryID
+				config.PrimaryID = ID
+				config.BackupID = ""
+				config.TakeOverInProgress = true
 
 			}
 		}
@@ -93,12 +82,12 @@ func Backup(ID string) {
 
 }
 
-func mergeOrders(orders1 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orders2 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
-	var mergedOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool
+func mergeOrders(orders1 [config.MElevators][config.NFloors][config.NButtons]bool, orders2 [config.MElevators][config.NFloors][config.NButtons]bool) [config.MElevators][config.NFloors][config.NButtons]bool {
+	var mergedOrders [config.MElevators][config.NFloors][config.NButtons]bool
 
-	for i := 0; i < fsm.NFloors; i++ {
-		for j := 0; j < fsm.NButtons-1; j++ {
-			for k := 0; k < fsm.MElevators; k++ {
+	for i := 0; i < config.NFloors; i++ {
+		for j := 0; j < config.NButtons-1; j++ {
+			for k := 0; k < config.MElevators; k++ {
 				if orders1[k][i][j] || orders2[k][i][j] {
 					mergedOrders[k][i][j] = true
 				}
