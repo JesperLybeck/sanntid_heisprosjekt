@@ -285,3 +285,48 @@ func HandleDoorTimeout(E Elevator) Elevator {
 
 	return nextElevator
 }
+
+// vi kan kalle disse som go routines der vi sender requests, til prim, og bekrefter utførte ordre.
+func SendRequestUpdate(transmitterChan chan<- Order, ackChan <-chan Status, message Order, ID string) {
+	sendingTicker := time.NewTicker(100 * time.Millisecond)
+	defer sendingTicker.Stop()
+	print("sending request update")
+
+	for {
+		select {
+		case <-sendingTicker.C:
+
+			transmitterChan <- message
+
+		case status := <-ackChan: //
+
+			floor := message.ButtonEvent.Floor
+			button := message.ButtonEvent.Button
+			if status.Orders[IpToIndexMap[ID]][floor][button] == message.Orders[floor][button] {
+				print("requestupdate acked")
+
+				return
+			}
+		}
+
+	}
+}
+func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string) {
+	sendingTicker := time.NewTicker(100 * time.Millisecond)
+	defer sendingTicker.Stop()
+	print("sending order")
+	for {
+		select {
+		case <-sendingTicker.C:
+			transmitterChan <- message
+		case status := <-ackChan:
+			button := message.ButtonEvent.Button
+			floor := message.ButtonEvent.Floor
+			if status.Orders[floor][button] == message.Orders[floor][button] {
+				print("order acked")
+
+				return
+			}
+		}
+	}
+}

@@ -36,16 +36,18 @@ func main() {
 	OrderCompletedTX := make(chan fsm.Order)
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
 	peersRX := make(chan peers.PeerUpdate)
+	primStatusRX := make(chan fsm.Status)
 
 	buttonPressCh := make(chan elevio.ButtonEvent)
 	floorReachedCh := make(chan int)
+
 	//doorTimeoutCh := make(chan bool)
 
 	//vi skiller mellom intern komunikasjon og kommunikasjon med primary.
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
-	statusTicker := time.NewTicker(200 * time.Millisecond)
+	statusTicker := time.NewTicker(50 * time.Millisecond)
 
 	//------------------------ASSIGNING ENVIRONMENT VARIABLES------------------------
 	ID = os.Getenv("ID")
@@ -114,11 +116,17 @@ func main() {
 	go bcast.Receiver(13060, LightUpdateFromPrimRX)
 	go peers.Transmitter(12055, ID, peerTX)
 	go peers.Receiver(12055, peersRX)
+	go bcast.Receiver(13055, primStatusRX)
 
 	//-----------------------------MAIN LOOP-----------------------------
 	for {
 		select {
-		case p := <-peersRX:
+		case primStatus := <-primStatusRX:
+			//Hva om vi gjør en del av dette her, heller enn i pba?
+			fsm.IpToIndexMap = primStatus.Map
+			fsm.LatestPeerList = primStatus.Peerlist
+
+		case p := <-peersRX: //vi klarer oss vell uten denne, med casen over?
 			// To register if alone on network and enter offline mode
 			if len(p.Peers) == 0 {
 				fsm.AloneOnNetwork = true
@@ -135,7 +143,7 @@ func main() {
 			}
 
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
-
+			elevator.Input.LocalRequests[btnEvent.Floor][btnEvent.Button] = true
 			requestToPrimary := fsm.Order{
 				ButtonEvent: btnEvent,
 				ID:          ID,
@@ -143,13 +151,11 @@ func main() {
 				Orders:      elevator.Input.LocalRequests,
 			}
 
-
-			RequestToPrimTX <- requestToPrimary
+			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary, ID)
 			fmt.Println("Sent order to primary: ", requestToPrimary)
-			
 
 			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
-				
+
 				elevator = fsm.HandleNewOrder(requestToPrimary, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevio.SetButtonLamp(elevio.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(elevator)
@@ -165,14 +171,13 @@ func main() {
 				//denne kunne også strengt tatt gått inn i handle new Order functionen.
 				continue
 			}
-			print("Received order from primary: ")
 
 			elevator = fsm.HandleNewOrder(order, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 
 			setHardwareEffects(elevator)
 
 		case a := <-floorReachedCh:
-	
+
 			elevator = fsm.HandleFloorReached(a, elevator)
 
 			setHardwareEffects(elevator)
@@ -181,7 +186,6 @@ func main() {
 				elevio.SetButtonLamp(elevio.BT_Cab, a, false)
 			}
 
-
 		case <-elevator.DoorTimer.C:
 			elevator.DoorObstructed = elevio.GetObstruction()
 			elevator = fsm.HandleDoorTimeout(elevator)
@@ -189,14 +193,16 @@ func main() {
 			setHardwareEffects(elevator)
 
 			orderMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
+
 			elevator.OrderCompleteTimer.Stop()
-			OrderCompletedTX <- orderMessage
+			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage, ID)
+
 		case <-elevator.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
 			panic("Node failed to complete order, possible engine failure or faulty sensor")
 		case <-statusTicker.C:
 
-			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: elevator.Output.MotorDirection}
+			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: elevator.Output.MotorDirection, Orders: elevator.Output.LocalOrders}
 
 		}
 

@@ -42,6 +42,7 @@ type SingleElevatorStatus struct {
 	ID             string
 	PrevFloor      int
 	MotorDirection elevio.MotorDirection
+	Orders         [NFloors][NButtons]bool
 }
 type CostTuple struct {
 	Cost int

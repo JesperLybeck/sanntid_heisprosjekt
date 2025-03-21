@@ -16,7 +16,6 @@ func Primary(ID string) {
 
 			//TODO, PASS CHANNELS I GOROUTINES
 
-			println("Primary", ID)
 			statusTX := make(chan fsm.Status)
 			orderTX := make(chan fsm.Order)
 			orderRX := make(chan fsm.Order)
@@ -45,7 +44,7 @@ func Primary(ID string) {
 						//do stuff
 						fmt.Println("Takeover in progress", fsm.LatestPeerList)
 
-						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX)
+						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX)
 						fsm.TakeOverInProgress = false
 					}
 					select {
@@ -64,7 +63,7 @@ func Primary(ID string) {
 							}
 						}
 						fmt.Println(p.Peers)
-	
+
 						if string(p.New) != "" {
 							index, exists := getOrAssignIndex(string(p.New))
 
@@ -81,7 +80,8 @@ func Primary(ID string) {
 											TargetID: string(p.New),
 											Orders:   fsm.StoredOrders[index]}
 										fmt.Print("restored cabcalls: ", newOrder.Orders, " for ", newOrder.TargetID)
-										orderTX <- newOrder
+										print("")
+										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID)
 
 									}
 								}
@@ -93,7 +93,7 @@ func Primary(ID string) {
 						for i := 0; i < len(p.Lost); i++ {
 							//alle som dør
 							print("Lost: ", p.Lost[i])
-							fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX)
+							fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX, nodeStatusRX)
 
 							//hvis backup dør
 							if p.Lost[i] == fsm.BackupID {
@@ -110,7 +110,7 @@ func Primary(ID string) {
 
 					case <-ticker.C:
 						//sending status to backup
-						fmt.Println("I am Primary")
+
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
 						//periodic light update to nodes.
 
@@ -123,6 +123,7 @@ func Primary(ID string) {
 
 							//if the new lightmatrix is different from the previous lights for the node:
 							if lightsDifferent(lightUpdate, prevLightMatrix[i]) {
+								print("lights are the new")
 								TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
 								//send out the updated lightmatrix to the node.
 								prevLightMatrix[i] = lightUpdate //update the previous lightmatrix.
@@ -130,7 +131,7 @@ func Primary(ID string) {
 						}
 
 					case a := <-orderRX:
-						print("order received from node", a.ID)
+
 						//Hall assignment
 
 						//Update StoredOrders
@@ -140,9 +141,10 @@ func Primary(ID string) {
 						fsm.StoredOrders[responsibleElevatorIndex][a.ButtonEvent.Floor][a.ButtonEvent.Button] = true
 						//sent to backup in next status update
 
-						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: searchMap(responsibleElevatorIndex), Orders: fsm.StoredOrders[responsibleElevatorIndex]}
+						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: responsibleElevator, Orders: fsm.StoredOrders[responsibleElevatorIndex]}
+
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
-						orderTX <- newMessage
+						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID)
 
 					case a := <-RXFloorReached:
 						if a.ID != "" { //liker ikke dennne her):
@@ -241,7 +243,7 @@ func makeLightMatrix(ID string) [fsm.NFloors][fsm.NButtons]bool {
 	return lightMatrix
 }
 
-func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orderTX chan<- fsm.Order) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
+func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orderTX chan<- fsm.Order, ackChan <-chan fsm.SingleElevatorStatus) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
 	distributedOrders := StoredOrders
 	lostNodeIndex, _ := getIndex(lostNodeID)
 	print("lost node index: ", lostNodeID)
@@ -260,7 +262,7 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
 				distributedOrders[responsibleElevatorIndex][i][j] = true
 
-				orderTX <- lostOrder
+				fsm.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator)
 
 			}
 		}
