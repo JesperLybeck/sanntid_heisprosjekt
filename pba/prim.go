@@ -5,7 +5,6 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
-	"fmt"
 	"time"
 )
 
@@ -42,7 +41,6 @@ func Primary(ID string) {
 				if ID == fsm.PrimaryID {
 					if fsm.TakeOverInProgress {
 						//do stuff
-						fmt.Println("Takeover in progress", fsm.LatestPeerList)
 
 						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX)
 						fsm.TakeOverInProgress = false
@@ -54,7 +52,7 @@ func Primary(ID string) {
 					case p := <-peersRX:
 						fsm.AloneOnNetwork = false
 						fsm.LatestPeerList = p
-						fmt.Println(fsm.LatestPeerList.Lost)
+
 						if fsm.BackupID == "" && len(p.Peers) > 1 {
 							for i := 0; i < len(p.Peers); i++ {
 								if p.Peers[i] != ID {
@@ -62,7 +60,6 @@ func Primary(ID string) {
 								}
 							}
 						}
-						fmt.Println(p.Peers)
 
 						if string(p.New) != "" {
 							index, exists := getOrAssignIndex(string(p.New))
@@ -72,32 +69,30 @@ func Primary(ID string) {
 								// kanskje vi kan lage en "fake" new order? Eventuelt om vi bør endre single elevator til å ikke være event basert, men heller "while requests in queue"
 								//Hvis vi finner at det er lagret cab calls for denne heisen som ikke er gjort her i remote, så trigger vi en ny ordre .
 								for i := 0; i < fsm.NFloors; i++ {
-									fmt.Print(fsm.StoredOrders[index][i][2])
+
 									if fsm.StoredOrders[index][i][2] {
-										print("prevusly stored cab call")
+
 										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: 2},
 											ID:       ID,
 											TargetID: string(p.New),
 											Orders:   fsm.StoredOrders[index]}
-										fmt.Print("restored cabcalls: ", newOrder.Orders, " for ", newOrder.TargetID)
-										print("")
+
 										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID)
 
 									}
 								}
 
-								println("Retrieving CAB calls")
 							}
 						}
 
 						for i := 0; i < len(p.Lost); i++ {
 							//alle som dør
-							print("Lost: ", p.Lost[i])
+
 							fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX, nodeStatusRX)
 
 							//hvis backup dør
 							if p.Lost[i] == fsm.BackupID {
-								println("Backup lost")
+
 								for j := 0; j < len(p.Peers); j++ {
 									if p.Peers[j] != fsm.PrimaryID {
 										fsm.BackupID = p.Peers[j]
@@ -123,7 +118,7 @@ func Primary(ID string) {
 
 							//if the new lightmatrix is different from the previous lights for the node:
 							if lightsDifferent(lightUpdate, prevLightMatrix[i]) {
-								print("lights are the new")
+
 								TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
 								//send out the updated lightmatrix to the node.
 								prevLightMatrix[i] = lightUpdate //update the previous lightmatrix.
@@ -144,6 +139,7 @@ func Primary(ID string) {
 						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: responsibleElevator, Orders: fsm.StoredOrders[responsibleElevatorIndex]}
 
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
+
 						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID)
 
 					case a := <-RXFloorReached:
@@ -152,6 +148,10 @@ func Primary(ID string) {
 							index, _ := getIndex(a.ID)
 
 							fsm.StoredOrders = updateOrders(a.Orders, index)
+
+							//lightUpdate := makeLightMatrix(a.ID)
+
+							//TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: a.ID}
 
 						}
 
@@ -183,7 +183,7 @@ func updateOrders(ordersFromNode [fsm.NFloors][fsm.NButtons]bool, elevator int) 
 	return newStoredOrders
 }
 func getIndex(ip string) (int, bool) {
-	print("looking for ip ,", ip)
+
 	if index, exists := fsm.IpToIndexMap[ip]; exists {
 
 		return index, true
@@ -200,7 +200,6 @@ func getOrAssignIndex(ip string) (int, bool) {
 	} else {
 
 		fsm.IpToIndexMap[ip] = len(fsm.IpToIndexMap)
-		print("ip ", ip, "not found")
 
 		return fsm.IpToIndexMap[ip], false
 	}
@@ -246,7 +245,7 @@ func makeLightMatrix(ID string) [fsm.NFloors][fsm.NButtons]bool {
 func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orderTX chan<- fsm.Order, ackChan <-chan fsm.SingleElevatorStatus) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
 	distributedOrders := StoredOrders
 	lostNodeIndex, _ := getIndex(lostNodeID)
-	print("lost node index: ", lostNodeID)
+
 	lostOrders := StoredOrders[lostNodeIndex]
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons-1; j++ {
@@ -254,11 +253,9 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ID: lostNodeID, TargetID: "", Orders: lostOrders}
 				responsibleElevator := AssignRequest(lostOrder, fsm.LatestPeerList)
 				lostOrder.TargetID = responsibleElevator
-				fmt.Print("lost order: ", lostOrder)
 
 				distributedOrders[lostNodeIndex][i][j] = false
-				fmt.Print("orders of lost node: ", distributedOrders[lostNodeIndex])
-				print("responsible elevator: ", responsibleElevator)
+
 				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
 				distributedOrders[responsibleElevatorIndex][i][j] = true
 

@@ -7,7 +7,6 @@ import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
-	"fmt"
 	"os"
 	"time"
 )
@@ -133,6 +132,7 @@ func main() {
 			}
 		case lights := <-LightUpdateFromPrimRX:
 			//when light update is received from primary, the node updates its own lights with the newest information.
+
 			if lights.ID == ID {
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
@@ -152,7 +152,6 @@ func main() {
 			}
 
 			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary, ID)
-			fmt.Println("Sent order to primary: ", requestToPrimary)
 
 			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
 
@@ -171,7 +170,9 @@ func main() {
 				//denne kunne også strengt tatt gått inn i handle new Order functionen.
 				continue
 			}
-
+			//problem om heisen allerede er i etasjen ordren er i.
+			//Da vil primary ikke få ack, fordi handle new order legger ikke til ordren i localOrders.
+			//programmet terminerer ikke.
 			elevator = fsm.HandleNewOrder(order, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 
 			setHardwareEffects(elevator)
@@ -187,6 +188,7 @@ func main() {
 			}
 
 		case <-elevator.DoorTimer.C:
+
 			elevator.DoorObstructed = elevio.GetObstruction()
 			elevator = fsm.HandleDoorTimeout(elevator)
 
@@ -195,6 +197,7 @@ func main() {
 			orderMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
 
 			elevator.OrderCompleteTimer.Stop()
+
 			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage, ID)
 
 		case <-elevator.OrderCompleteTimer.C:
