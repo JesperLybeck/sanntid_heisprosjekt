@@ -3,10 +3,10 @@
 
 
 # Set the variables
-nodeID="1"
-PORT=16001
+nodeID="33"
+PORT=16003
 
-STARTASPRIM=true
+STARTASPRIM=false
 
 LASTNUMBER=${PORT: -1}
 go build -o "elevator_${LASTNUMBER}" main.go

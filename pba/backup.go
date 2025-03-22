@@ -12,7 +12,7 @@ import (
 var LatestStatusFromPrimary fsm.Status
 
 func Backup(ID string) {
-	var timeout = time.After(3 * time.Second) // Set timeout duration
+	var timeout = time.After(100 * time.Second) // Set timeout duration
 	var primaryStatusRX = make(chan fsm.Status)
 	go bcast.Receiver(13055, primaryStatusRX)
 	LatestStatusFromPrimary := fsm.Status{}
@@ -51,7 +51,7 @@ func Backup(ID string) {
 						isBackup = true
 					}
 
-					timeout = time.After(3 * time.Second)
+					timeout = time.After(100 * time.Second)
 				} /* else if p.Version > fsm.Version {
 					fmt.Println("Primary version higher. accepting new primary")
 					fsm.Version = p.Version
@@ -67,14 +67,14 @@ func Backup(ID string) {
 
 			select {
 			case p := <-primaryStatusRX:
-				fmt.Println("I am Backup")
+
 				LatestStatusFromPrimary = p
 				fsm.StoredOrders = p.Orders
 				fsm.IpToIndexMap = p.Map
 				fsm.Version = p.Version
 				fsm.LatestPeerList = p.Peerlist
 
-				timeout = time.After(3 * time.Second)
+				timeout = time.After(100 * time.Second)
 
 			case <-timeout:
 				fmt.Println("Primary timed out")

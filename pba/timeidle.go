@@ -2,6 +2,7 @@ package pba
 
 import (
 	"Network-go/network/peers"
+	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"math"
 )
@@ -29,10 +30,10 @@ func indexOf(arr []int, value int) int {
 	return -1 // Return -1 if the value is not found
 }
 
-func AssignRequest(request fsm.Order, latestPeerList peers.PeerUpdate) string {
+func AssignOrder(request fsm.Order, latestPeerList peers.PeerUpdate) string {
 	costs := make([]fsm.CostTuple, len(latestPeerList.Peers)) // costs for each elevator
-	if request.ButtonEvent.Button == 2 {
-		return request.ID
+	if request.ButtonEvent.Button == elevio.BT_Cab {
+		return request.ResponisbleElevator
 	}
 
 	for p := 0; p < len(latestPeerList.Peers); p++ {

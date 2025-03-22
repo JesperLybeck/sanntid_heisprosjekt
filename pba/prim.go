@@ -5,6 +5,7 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
+	"fmt"
 	"time"
 )
 
@@ -17,9 +18,9 @@ func Primary(ID string) {
 
 			statusTX := make(chan fsm.Status)
 			orderTX := make(chan fsm.Order)
-			orderRX := make(chan fsm.Order)
+			requestRX := make(chan fsm.Request)
 			nodeStatusRX := make(chan fsm.SingleElevatorStatus)
-			RXFloorReached := make(chan fsm.Order)
+			RXFloorReached := make(chan fsm.Request)
 
 			TXLightUpdates := make(chan fsm.LightUpdate)
 
@@ -29,13 +30,12 @@ func Primary(ID string) {
 			go peers.Receiver(12055, peersRX)
 			go bcast.Transmitter(13055, statusTX)
 			go bcast.Transmitter(13056, orderTX)
-			go bcast.Receiver(13057, orderRX)
+			go bcast.Receiver(13057, requestRX)
 			go bcast.Receiver(13058, RXFloorReached)
 			go bcast.Receiver(13059, nodeStatusRX)
 			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(200 * time.Millisecond)
-			prevLightMatrix := [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool{}
+			ticker := time.NewTicker(30 * time.Millisecond)
 
 			for {
 				if ID == fsm.PrimaryID {
@@ -72,10 +72,9 @@ func Primary(ID string) {
 
 									if fsm.StoredOrders[index][i][2] {
 
-										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: 2},
-											ID:       ID,
-											TargetID: string(p.New),
-											Orders:   fsm.StoredOrders[index]}
+										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.BT_Cab},
+											ResponisbleElevator: string(p.New),
+										}
 
 										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID)
 
@@ -117,26 +116,30 @@ func Primary(ID string) {
 							//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
 
 							//if the new lightmatrix is different from the previous lights for the node:
-							if lightsDifferent(lightUpdate, prevLightMatrix[i]) {
 
-								TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
-								//send out the updated lightmatrix to the node.
-								prevLightMatrix[i] = lightUpdate //update the previous lightmatrix.
-							}
+							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
+							//send out the updated lightmatrix to the node.
+
 						}
+				
 
-					case a := <-orderRX:
+					case a := <-requestRX:
 
 						//Hall assignment
-
+						/*if hallCallAssigned(a) {
+							continue
+						}*/
 						//Update StoredOrders
-						responsibleElevator := AssignRequest(a, fsm.LatestPeerList)
+						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID}
+
+						responsibleElevator := AssignOrder(order, fsm.LatestPeerList)
+
 						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
 
 						fsm.StoredOrders[responsibleElevatorIndex][a.ButtonEvent.Floor][a.ButtonEvent.Button] = true
 						//sent to backup in next status update
 
-						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ID: ID, TargetID: responsibleElevator, Orders: fsm.StoredOrders[responsibleElevatorIndex]}
+						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: responsibleElevator}
 
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
@@ -144,14 +147,15 @@ func Primary(ID string) {
 
 					case a := <-RXFloorReached:
 						if a.ID != "" { //liker ikke dennne her):
-
+							fmt.Print("a.orders:", a.Orders)
 							index, _ := getIndex(a.ID)
 
 							fsm.StoredOrders = updateOrders(a.Orders, index)
+							fmt.Print("Stored orders", fsm.StoredOrders[index])
 
-							//lightUpdate := makeLightMatrix(a.ID)
+							lightUpdate := makeLightMatrix(a.ID)
 
-							//TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: a.ID}
+							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: a.ID}
 
 						}
 
@@ -169,9 +173,11 @@ func updateOrders(ordersFromNode [fsm.NFloors][fsm.NButtons]bool, elevator int) 
 
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons; j++ {
+
 			newStoredOrders[elevator][i][j] = ordersFromNode[i][j]
 		}
 	}
+
 	// Copy existing orders
 	/*for i := range fsm.StoredOrders {
 		for j := range fsm.StoredOrders[i] {
@@ -224,13 +230,15 @@ func updateNodeMap(ID string, status fsm.SingleElevatorStatus) {
 
 func makeLightMatrix(ID string) [fsm.NFloors][fsm.NButtons]bool {
 
-	lightMatrix := fsm.StoredOrders[fsm.IpToIndexMap[ID]]
+	lightMatrix := [fsm.NFloors][fsm.NButtons]bool{}
+
 	for floor := 0; floor < fsm.NFloors; floor++ {
 		for button := 0; button < fsm.NButtons-1; button++ {
 			for elev := 0; elev < fsm.MElevators; elev++ {
 				if fsm.StoredOrders[elev][floor][button] {
 					lightMatrix[floor][button] = true
 				}
+
 			}
 		}
 	}
@@ -250,9 +258,9 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons-1; j++ {
 			if lostOrders[i][j] {
-				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ID: lostNodeID, TargetID: "", Orders: lostOrders}
-				responsibleElevator := AssignRequest(lostOrder, fsm.LatestPeerList)
-				lostOrder.TargetID = responsibleElevator
+				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ResponisbleElevator: ""}
+				responsibleElevator := AssignOrder(lostOrder, fsm.LatestPeerList)
+				lostOrder.ResponisbleElevator = responsibleElevator
 
 				distributedOrders[lostNodeIndex][i][j] = false
 
@@ -267,12 +275,11 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 	return distributedOrders
 
 }
-func lightsDifferent(lightArray1 [fsm.NFloors][fsm.NButtons]bool, lightArray2 [fsm.NFloors][fsm.NButtons]bool) bool {
-	for i := 0; i < fsm.NFloors; i++ {
-		for j := 0; j < fsm.NButtons; j++ {
-			if lightArray1[i][j] != lightArray2[i][j] {
-				return true
-			}
+
+func hallCallAssigned(order fsm.Order) bool {
+	for i := 0; i < fsm.MElevators; i++ {
+		if fsm.StoredOrders[i][order.ButtonEvent.Floor][order.ButtonEvent.Button] {
+			return true
 		}
 	}
 	return false

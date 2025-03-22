@@ -32,6 +32,7 @@ type Elevator struct {
 	Output             ElevatorOutput
 	DoorTimer          *time.Timer
 	OrderCompleteTimer *time.Timer
+	ObstructionTimer   *time.Timer
 	DoorObstructed     bool
 }
 
@@ -187,16 +188,18 @@ func HandleNewOrder(order Order, E Elevator) Elevator {
 	//først håndterer vi tilfellet der ordren er i etasjen vi er i.
 
 	switch nextElevator.State {
+
 	case DoorOpen:
 		if shouldClearImmediately(nextElevator, order.ButtonEvent) {
 			//uten disse, vil heisen stå i 6 sekunder.
 			nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = false
-			fmt.Print("clearing: ", elevio.ButtonType(order.ButtonEvent.Button))
 			nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][elevio.BT_Cab] = false
 			nextElevator.Output.MotorDirection = elevio.MD_Stop
 			nextElevator.State = DoorOpen
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
+			nextElevator.ObstructionTimer.Reset(7 * time.Second)
+			print("Clearing order immediately, resetting obstruction timer")
 			//her returnerer vi tomt, så prim som venter på ack, får aldri denne.
 
 			break
@@ -207,6 +210,8 @@ func HandleNewOrder(order Order, E Elevator) Elevator {
 		nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
 		DirectionStatePair := chooseDirection(nextElevator)
 		if DirectionStatePair.State == DoorOpen {
+			nextElevator.ObstructionTimer.Reset(7 * time.Second)
+			print("Clearing order immediately, resetting obstruction timer")
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator = clearAtFloor(nextElevator)
@@ -242,8 +247,11 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 			nextElevator.Output.Door = true
 
 			nextElevator.DoorTimer.Reset(3 * time.Second)
+			fmt.Println("Resetting door timer")
+			nextElevator.ObstructionTimer.Reset(7 * time.Second)
 
 			nextElevator.State = DoorOpen
+
 		}
 		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
 
@@ -251,6 +259,16 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 
 	return nextElevator
 
+}
+func LightsDifferent(lightArray1 [NFloors][NButtons]bool, lightArray2 [NFloors][NButtons]bool) bool {
+	for i := 0; i < NFloors; i++ {
+		for j := 0; j < NButtons; j++ {
+			if lightArray1[i][j] != lightArray2[i][j] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func HandleDoorTimeout(E Elevator) Elevator {
@@ -274,28 +292,38 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		case MovingBetweenFloors:
 			nextElevator.Output.Door = false
 		}
+
 	}
 	if nextElevator.Output.MotorDirection != elevio.MD_Stop {
 
 		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
 	}
-	if nextElevator.State != DoorOpen && nextElevator.DoorObstructed {
+	if nextElevator.DoorObstructed {
 
 		nextElevator.Output.Door = true
 		nextElevator.State = DoorOpen
 		nextElevator.DoorTimer.Reset(4 * time.Second)
 		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
+
+	} else {
+		fmt.Println("Door timer stopped")
+		nextElevator.ObstructionTimer.Stop()
 	}
 
 	return nextElevator
 }
 
 // vi kan kalle disse som go routines der vi sender requests, til prim, og bekrefter utførte ordre.
-func SendRequestUpdate(transmitterChan chan<- Order, ackChan <-chan Status, message Order, ID string) {
-	sendingTicker := time.NewTicker(150 * time.Millisecond)
+func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, message Request) {
+
+	sendingTicker := time.NewTicker(100 * time.Millisecond)
+
 	defer sendingTicker.Stop()
 
+	//dette betyr at andre noder kan acke ordre som ikke er til dem?
+
 	messagesSent := 0
+	print("Sending request update")
 
 	for {
 		select {
@@ -303,26 +331,32 @@ func SendRequestUpdate(transmitterChan chan<- Order, ackChan <-chan Status, mess
 
 			transmitterChan <- message
 			messagesSent++
+			print(messagesSent, "-------------------------------------")
 
 		case status := <-ackChan: //kan dette skje på samme melding?
 
 			floor := message.ButtonEvent.Floor
 			button := message.ButtonEvent.Button
-			if (status.Orders[IpToIndexMap[ID]][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
-
-				return
+			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
+			for j := 0; j < MElevators; j++ {
+				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
+					print("Request acked")
+					print(messagesSent)
+					return
+				}
 			}
 		}
 
 	}
 }
+
 func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string) {
-	sendingTicker := time.NewTicker(150 * time.Millisecond)
+	sendingTicker := time.NewTicker(100 * time.Millisecond)
 
 	defer sendingTicker.Stop()
 	messagesSent := 0
 	// er vi nødt til å acke ordre gitt i etasje vi allerede er i?
-
+	print("Sending order")
 	for {
 		select {
 		case <-sendingTicker.C:
@@ -332,8 +366,8 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			button := message.ButtonEvent.Button
 			floor := message.ButtonEvent.Floor
 
-			if status.Orders[floor][button] == message.Orders[floor][button] || (message.ButtonEvent.Floor == status.PrevFloor && messagesSent > 0) {
-
+			if message.ResponisbleElevator == status.ID && (status.Orders[floor][button] || (message.ButtonEvent.Floor == status.PrevFloor && messagesSent > 0)) {
+				fmt.Println("Order acked")
 				return
 			}
 		}

@@ -32,12 +32,18 @@ type Status struct {
 	Peerlist      peers.PeerUpdate
 }
 
-type Order struct {
+type Request struct {
 	ButtonEvent elevio.ButtonEvent
 	ID          string
 	TargetID    string
 	Orders      [NFloors][NButtons]bool
 }
+
+type Order struct {
+	ButtonEvent elevio.ButtonEvent
+	ResponisbleElevator    string
+}
+
 type SingleElevatorStatus struct {
 	ID             string
 	PrevFloor      int

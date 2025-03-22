@@ -30,9 +30,9 @@ func main() {
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
 	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
-	RequestToPrimTX := make(chan fsm.Order)
+	RequestToPrimTX := make(chan fsm.Request)
 	OrderFromPrimRX := make(chan fsm.Order)
-	OrderCompletedTX := make(chan fsm.Order)
+	OrderCompletedTX := make(chan fsm.Request)
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
 	peersRX := make(chan peers.PeerUpdate)
 	primStatusRX := make(chan fsm.Status)
@@ -46,7 +46,7 @@ func main() {
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
-	statusTicker := time.NewTicker(50 * time.Millisecond)
+	statusTicker := time.NewTicker(30 * time.Millisecond)
 
 	//------------------------ASSIGNING ENVIRONMENT VARIABLES------------------------
 	ID = os.Getenv("ID")
@@ -75,6 +75,7 @@ func main() {
 	}
 	//-----------------------------STATE MACHINE VARIABLES-----------------------------
 	var elevator fsm.Elevator
+	var prevLightMatrix [fsm.NFloors][fsm.NButtons]bool
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevio.Init("localhost:"+elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
@@ -96,10 +97,12 @@ func main() {
 	elevator.State = fsm.Idle                                        //after initializing the elevator, it goes to the idle state.
 	elevator.Input.LocalRequests = [fsm.NFloors][fsm.NButtons]bool{} // not strictly necessary, but...
 	elevator.Output.LocalOrders = [fsm.NFloors][fsm.NButtons]bool{}
-	elevator.Output.Door = false
 	elevator.Input.PrevFloor = elevio.GetFloor()
 	elevator.DoorTimer = time.NewTimer(3 * time.Second)
 	elevator.OrderCompleteTimer = time.NewTimer(fsm.OrderTimeout * time.Second)
+	elevator.ObstructionTimer = time.NewTimer(7 * time.Second)
+
+	elevator.ObstructionTimer.Stop()
 	elevator.DoorTimer.Stop()
 	elevator.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
@@ -131,31 +134,34 @@ func main() {
 				fsm.AloneOnNetwork = true
 			}
 		case lights := <-LightUpdateFromPrimRX:
-			//when light update is received from primary, the node updates its own lights with the newest information.
 
-			if lights.ID == ID {
+			//when light update is received from primary, the node updates its own lights with the newest information.
+			if (fsm.LightsDifferent(prevLightMatrix, lights.LightArray)) && lights.ID == ID {
+
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
 						elevio.SetButtonLamp(elevio.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
 
 					}
+
+					prevLightMatrix = lights.LightArray
 				}
 			}
 
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
 			elevator.Input.LocalRequests[btnEvent.Floor][btnEvent.Button] = true
-			requestToPrimary := fsm.Order{
+			requestToPrimary := fsm.Request{
 				ButtonEvent: btnEvent,
 				ID:          ID,
 				TargetID:    fsm.PrimaryID,
 				Orders:      elevator.Input.LocalRequests,
 			}
-
-			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary, ID)
+			// ISSUE! when the order is delegated to a different node, we cant ack on
+			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary)
 
 			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
-
-				elevator = fsm.HandleNewOrder(requestToPrimary, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
+				offlineOrder := fsm.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
+				elevator = fsm.HandleNewOrder(offlineOrder, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevio.SetButtonLamp(elevio.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(elevator)
 			}
@@ -166,8 +172,9 @@ func main() {
 
 		case order := <-OrderFromPrimRX: // I denne casen mottar noden en ordre fra primary.
 
-			if order.TargetID != ID { // hvis ordren er til en annen heis, ignorer.
+			if order.ResponisbleElevator != ID { // hvis ordren er til en annen heis, ignorer.
 				//denne kunne også strengt tatt gått inn i handle new Order functionen.
+
 				continue
 			}
 			//problem om heisen allerede er i etasjen ordren er i.
@@ -190,19 +197,23 @@ func main() {
 		case <-elevator.DoorTimer.C:
 
 			elevator.DoorObstructed = elevio.GetObstruction()
+
 			elevator = fsm.HandleDoorTimeout(elevator)
 
 			setHardwareEffects(elevator)
 
-			orderMessage := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
+			orderMessage := fsm.Request{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
 
 			elevator.OrderCompleteTimer.Stop()
 
-			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage, ID)
+			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage)
 
 		case <-elevator.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
 			panic("Node failed to complete order, possible engine failure or faulty sensor")
+		case <-elevator.ObstructionTimer.C:
+			print("Node failed to complete order. throwing panic")
+			panic("Node failed to complete order, door obstruction")
 		case <-statusTicker.C:
 
 			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: elevator.Output.MotorDirection, Orders: elevator.Output.LocalOrders}
