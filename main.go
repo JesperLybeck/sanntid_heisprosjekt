@@ -46,7 +46,7 @@ func main() {
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
-	statusTicker := time.NewTicker(100 * time.Millisecond)
+	statusTicker := time.NewTicker(50 * time.Millisecond)
 
 	//------------------------ASSIGNING ENVIRONMENT VARIABLES------------------------
 	ID = os.Getenv("ID")
@@ -178,9 +178,10 @@ func main() {
 
 			if order.ResponisbleElevator != ID || order.ResponisbleElevator == ID && lastOrderID == order.OrderID { // hvis ordren er til en annen heis, ignorer.
 				//denne kunne også strengt tatt gått inn i handle new Order functionen.
-
+				print("anti spam order received from prim")
 				continue
 			}
+			print("handling new order")
 			//problem om heisen allerede er i etasjen ordren er i.
 			//Da vil primary ikke få ack, fordi handle new order legger ikke til ordren i localOrders.
 			//programmet terminerer ikke.

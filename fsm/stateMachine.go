@@ -317,7 +317,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 // vi kan kalle disse som go routines der vi sender requests, til prim, og bekrefter utførte ordre.
 func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, message Request, requestID int) {
 
-	sendingTicker := time.NewTicker(200 * time.Millisecond)
+	sendingTicker := time.NewTicker(30 * time.Millisecond)
 
 	defer sendingTicker.Stop()
 
@@ -352,7 +352,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 }
 
 func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int) {
-	sendingTicker := time.NewTicker(200 * time.Millisecond)
+	sendingTicker := time.NewTicker(30 * time.Millisecond)
 
 	defer sendingTicker.Stop()
 	messagesSent := 0

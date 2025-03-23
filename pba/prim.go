@@ -107,23 +107,23 @@ func Primary(ID string) {
 
 					case <-ticker.C:
 						//sending status to backup
-						/*
-							statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
-							//periodic light update to nodes.
 
-							//when it is time to send light update:
-							// for each node that is active:
-							for i := 0; i < len(fsm.LatestPeerList.Peers); i++ {
-								//compute the new lightmatrix given the stored orders.
-								lightUpdate := makeLightMatrix(fsm.LatestPeerList.Peers[i])
-								//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
+						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
+						/*//periodic light update to nodes.
 
-								//if the new lightmatrix is different from the previous lights for the node:
+						//when it is time to send light update:
+						// for each node that is active:
+						for i := 0; i < len(fsm.LatestPeerList.Peers); i++ {
+							//compute the new lightmatrix given the stored orders.
+							lightUpdate := makeLightMatrix(fsm.LatestPeerList.Peers[i])
+							//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
 
-								TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
-								//send out the updated lightmatrix to the node.
+							//if the new lightmatrix is different from the previous lights for the node:
 
-							}*/
+							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
+							//send out the updated lightmatrix to the node.
+
+						}*/
 
 					case a := <-requestRX:
 
