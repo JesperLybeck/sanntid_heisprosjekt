@@ -5,6 +5,7 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
+	"fmt"
 	"time"
 )
 
@@ -36,7 +37,7 @@ func Primary(ID string) {
 			go bcast.Receiver(13059, nodeStatusRX)
 			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(50 * time.Millisecond)
+			ticker := time.NewTicker(30 * time.Millisecond)
 
 			for {
 				if ID == fsm.PrimaryID {
@@ -77,7 +78,7 @@ func Primary(ID string) {
 											ResponisbleElevator: string(p.New),
 											OrderID:             OrderNumber,
 										}
-
+										print("new order from restore cab calls")
 										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID, OrderNumber)
 										OrderNumber++
 
@@ -86,11 +87,11 @@ func Primary(ID string) {
 
 							}
 						}
-
+						fmt.Print("lost node", p.Lost)
 						for i := 0; i < len(p.Lost); i++ {
 							//alle som dør
 
-							fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX, nodeStatusRX)
+							//fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX, nodeStatusRX)
 
 							//hvis backup dør
 							if p.Lost[i] == fsm.BackupID {
@@ -109,7 +110,7 @@ func Primary(ID string) {
 						//sending status to backup
 
 						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
-						/*//periodic light update to nodes.
+						//periodic light update to nodes.
 
 						//when it is time to send light update:
 						// for each node that is active:
@@ -123,7 +124,7 @@ func Primary(ID string) {
 							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
 							//send out the updated lightmatrix to the node.
 
-						}*/
+						}
 
 					case a := <-requestRX:
 
@@ -135,13 +136,14 @@ func Primary(ID string) {
 
 						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
 						if lastMessageNumber == a.RequestID {
-							print("ignoring duplicate Request")
+
 							continue
 						}
 
 						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
 
 						responsibleElevator := AssignOrder(order, fsm.LatestPeerList)
+						order.ResponisbleElevator = responsibleElevator
 
 						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator, fsm.IpToIndexMap)
 
@@ -153,6 +155,7 @@ func Primary(ID string) {
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
 						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID, OrderNumber)
+						print("new order from request")
 						OrderNumber++
 						fsm.LastMessagesMap[a.ID] = a.RequestID
 
@@ -295,7 +298,7 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 
 				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator, fsm.IpToIndexMap)
 				distributedOrders[responsibleElevatorIndex][i][j] = true
-
+				print("new order from lost node")
 				fsm.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator, OrderNumber)
 				OrderNumber++
 

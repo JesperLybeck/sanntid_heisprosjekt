@@ -31,6 +31,9 @@ func indexOf(arr []int, value int) int {
 }
 
 func AssignOrder(request fsm.Order, latestPeerList peers.PeerUpdate) string {
+	if len(latestPeerList.Peers) == 0 {
+		panic("No avaialable elevators")
+	}
 	costs := make([]fsm.CostTuple, len(latestPeerList.Peers)) // costs for each elevator
 	if request.ButtonEvent.Button == elevio.BT_Cab {
 		return request.ResponisbleElevator
