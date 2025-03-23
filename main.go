@@ -46,7 +46,7 @@ func main() {
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
-	statusTicker := time.NewTicker(30 * time.Millisecond)
+	statusTicker := time.NewTicker(100 * time.Millisecond)
 
 	//------------------------ASSIGNING ENVIRONMENT VARIABLES------------------------
 	ID = os.Getenv("ID")
@@ -76,6 +76,8 @@ func main() {
 	//-----------------------------STATE MACHINE VARIABLES-----------------------------
 	var elevator fsm.Elevator
 	var prevLightMatrix [fsm.NFloors][fsm.NButtons]bool
+	var NumRequests int = 1
+	var lastOrderID int = 0
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevio.Init("localhost:"+elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
@@ -155,9 +157,11 @@ func main() {
 				ID:          ID,
 				TargetID:    fsm.PrimaryID,
 				Orders:      elevator.Input.LocalRequests,
+				RequestID:   NumRequests,
 			}
 			// ISSUE! when the order is delegated to a different node, we cant ack on
-			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary)
+			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary, NumRequests)
+			NumRequests++
 
 			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
 				offlineOrder := fsm.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
@@ -172,7 +176,7 @@ func main() {
 
 		case order := <-OrderFromPrimRX: // I denne casen mottar noden en ordre fra primary.
 
-			if order.ResponisbleElevator != ID { // hvis ordren er til en annen heis, ignorer.
+			if order.ResponisbleElevator != ID || order.ResponisbleElevator == ID && lastOrderID == order.OrderID { // hvis ordren er til en annen heis, ignorer.
 				//denne kunne også strengt tatt gått inn i handle new Order functionen.
 
 				continue
@@ -180,7 +184,8 @@ func main() {
 			//problem om heisen allerede er i etasjen ordren er i.
 			//Da vil primary ikke få ack, fordi handle new order legger ikke til ordren i localOrders.
 			//programmet terminerer ikke.
-			elevator = fsm.HandleNewOrder(order, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
+			elevator = fsm.HandleNewOrder(order, elevator)
+			lastOrderID = order.OrderID //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 
 			setHardwareEffects(elevator)
 
@@ -202,11 +207,16 @@ func main() {
 
 			setHardwareEffects(elevator)
 
-			orderMessage := fsm.Request{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()}, ID: ID, TargetID: fsm.PrimaryID, Orders: elevator.Output.LocalOrders}
+			orderMessage := fsm.Request{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()},
+				ID:        ID,
+				TargetID:  fsm.PrimaryID,
+				Orders:    elevator.Output.LocalOrders,
+				RequestID: NumRequests}
 
 			elevator.OrderCompleteTimer.Stop()
-
-			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage)
+			print("sending order complete message")
+			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage, NumRequests)
+			NumRequests++
 
 		case <-elevator.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")

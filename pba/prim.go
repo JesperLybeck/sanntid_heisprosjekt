@@ -5,9 +5,10 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
-	"fmt"
 	"time"
 )
+
+var OrderNumber int = 1
 
 func Primary(ID string) {
 
@@ -35,7 +36,7 @@ func Primary(ID string) {
 			go bcast.Receiver(13059, nodeStatusRX)
 			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(30 * time.Millisecond)
+			ticker := time.NewTicker(50 * time.Millisecond)
 
 			for {
 				if ID == fsm.PrimaryID {
@@ -62,7 +63,7 @@ func Primary(ID string) {
 						}
 
 						if string(p.New) != "" {
-							index, exists := getOrAssignIndex(string(p.New))
+							index, exists := getOrAssignIndex(string(p.New), fsm.IpToIndexMap)
 
 							if exists {
 								// Retrieve CAB calls.
@@ -74,9 +75,11 @@ func Primary(ID string) {
 
 										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.BT_Cab},
 											ResponisbleElevator: string(p.New),
+											OrderID:             OrderNumber,
 										}
 
-										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID)
+										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID, OrderNumber)
+										OrderNumber++
 
 									}
 								}
@@ -104,24 +107,23 @@ func Primary(ID string) {
 
 					case <-ticker.C:
 						//sending status to backup
+						/*
+							statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
+							//periodic light update to nodes.
 
-						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
-						//periodic light update to nodes.
+							//when it is time to send light update:
+							// for each node that is active:
+							for i := 0; i < len(fsm.LatestPeerList.Peers); i++ {
+								//compute the new lightmatrix given the stored orders.
+								lightUpdate := makeLightMatrix(fsm.LatestPeerList.Peers[i])
+								//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
 
-						//when it is time to send light update:
-						// for each node that is active:
-						for i := 0; i < len(fsm.LatestPeerList.Peers); i++ {
-							//compute the new lightmatrix given the stored orders.
-							lightUpdate := makeLightMatrix(fsm.LatestPeerList.Peers[i])
-							//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
+								//if the new lightmatrix is different from the previous lights for the node:
 
-							//if the new lightmatrix is different from the previous lights for the node:
+								TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
+								//send out the updated lightmatrix to the node.
 
-							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
-							//send out the updated lightmatrix to the node.
-
-						}
-				
+							}*/
 
 					case a := <-requestRX:
 
@@ -130,33 +132,47 @@ func Primary(ID string) {
 							continue
 						}*/
 						//Update StoredOrders
-						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID}
+
+						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
+						if lastMessageNumber == a.RequestID {
+							print("ignoring duplicate Request")
+							continue
+						}
+
+						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
 
 						responsibleElevator := AssignOrder(order, fsm.LatestPeerList)
 
-						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
+						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator, fsm.IpToIndexMap)
 
 						fsm.StoredOrders[responsibleElevatorIndex][a.ButtonEvent.Floor][a.ButtonEvent.Button] = true
 						//sent to backup in next status update
 
-						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: responsibleElevator}
+						newMessage := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: responsibleElevator, OrderID: OrderNumber}
 
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
-						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID)
+						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID, OrderNumber)
+						OrderNumber++
+						fsm.LastMessagesMap[a.ID] = a.RequestID
 
 					case a := <-RXFloorReached:
+
+						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
+						if lastMessageNumber == a.RequestID {
+
+							continue
+						}
 						if a.ID != "" { //liker ikke dennne her):
-							fmt.Print("a.orders:", a.Orders)
+
 							index, _ := getIndex(a.ID)
 
 							fsm.StoredOrders = updateOrders(a.Orders, index)
-							fmt.Print("Stored orders", fsm.StoredOrders[index])
 
 							lightUpdate := makeLightMatrix(a.ID)
 
 							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: a.ID}
-
+							fsm.LastMessagesMap[a.ID] = a.RequestID
 						}
 
 					}
@@ -198,18 +214,31 @@ func getIndex(ip string) (int, bool) {
 	}
 
 }
-func getOrAssignIndex(ip string) (int, bool) {
+func getOrAssignIndex(ip string, IDMap map[string]int) (int, bool) {
 
-	if index, exists := fsm.IpToIndexMap[ip]; exists {
+	if index, exists := IDMap[ip]; exists {
 
 		return index, true
 	} else {
 
-		fsm.IpToIndexMap[ip] = len(fsm.IpToIndexMap)
+		IDMap[ip] = len(fsm.IpToIndexMap)
 
-		return fsm.IpToIndexMap[ip], false
+		return IDMap[ip], false
 	}
 }
+func getOrAssignMessageNumber(ip string, IDMap map[string]int) (int, bool) {
+
+	if index, exists := IDMap[ip]; exists {
+
+		return index, true
+	} else {
+
+		IDMap[ip] = 0
+
+		return IDMap[ip], false
+	}
+}
+
 func searchMap(index int) string {
 	for key, value := range fsm.IpToIndexMap {
 		if value == index {
@@ -258,29 +287,21 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons-1; j++ {
 			if lostOrders[i][j] {
-				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ResponisbleElevator: ""}
+				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ResponisbleElevator: "", OrderID: OrderNumber}
 				responsibleElevator := AssignOrder(lostOrder, fsm.LatestPeerList)
 				lostOrder.ResponisbleElevator = responsibleElevator
 
 				distributedOrders[lostNodeIndex][i][j] = false
 
-				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
+				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator, fsm.IpToIndexMap)
 				distributedOrders[responsibleElevatorIndex][i][j] = true
 
-				fsm.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator)
+				fsm.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator, OrderNumber)
+				OrderNumber++
 
 			}
 		}
 	}
 	return distributedOrders
 
-}
-
-func hallCallAssigned(order fsm.Order) bool {
-	for i := 0; i < fsm.MElevators; i++ {
-		if fsm.StoredOrders[i][order.ButtonEvent.Floor][order.ButtonEvent.Button] {
-			return true
-		}
-	}
-	return false
 }

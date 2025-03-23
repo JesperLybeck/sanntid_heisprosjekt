@@ -4,6 +4,7 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"time"
+	//"golang.org/x/text/message"
 )
 
 const NFloors int = 4
@@ -22,6 +23,7 @@ var NodeStatusMap = make(map[string]SingleElevatorStatus)
 var PreviousPrimaryID string
 var OrderTimeout time.Duration = 7
 var AloneOnNetwork bool = false
+var LastMessagesMap = make(map[string]int)
 
 type Status struct {
 	TransmitterID string
@@ -30,6 +32,7 @@ type Status struct {
 	Version       int
 	Map           map[string]int
 	Peerlist      peers.PeerUpdate
+	StatusID      int
 }
 
 type Request struct {
@@ -37,11 +40,13 @@ type Request struct {
 	ID          string
 	TargetID    string
 	Orders      [NFloors][NButtons]bool
+	RequestID   int
 }
 
 type Order struct {
-	ButtonEvent elevio.ButtonEvent
-	ResponisbleElevator    string
+	ButtonEvent         elevio.ButtonEvent
+	ResponisbleElevator string
+	OrderID             int
 }
 
 type SingleElevatorStatus struct {
@@ -49,6 +54,7 @@ type SingleElevatorStatus struct {
 	PrevFloor      int
 	MotorDirection elevio.MotorDirection
 	Orders         [NFloors][NButtons]bool
+	StatusID       int
 }
 type CostTuple struct {
 	Cost int

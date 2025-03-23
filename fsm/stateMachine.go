@@ -3,6 +3,7 @@ package fsm
 import (
 	"Sanntid/elevio"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -314,16 +315,16 @@ func HandleDoorTimeout(E Elevator) Elevator {
 }
 
 // vi kan kalle disse som go routines der vi sender requests, til prim, og bekrefter utførte ordre.
-func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, message Request) {
+func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, message Request, requestID int) {
 
-	sendingTicker := time.NewTicker(100 * time.Millisecond)
+	sendingTicker := time.NewTicker(200 * time.Millisecond)
 
 	defer sendingTicker.Stop()
 
 	//dette betyr at andre noder kan acke ordre som ikke er til dem?
 
 	messagesSent := 0
-	print("Sending request update")
+	print("------Sending request update------")
 
 	for {
 		select {
@@ -331,17 +332,17 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 
 			transmitterChan <- message
 			messagesSent++
-			print(messagesSent, "-------------------------------------")
 
 		case status := <-ackChan: //kan dette skje på samme melding?
+			print("Received primary status!")
 
 			floor := message.ButtonEvent.Floor
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
 			for j := 0; j < MElevators; j++ {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
-					print("Request acked")
-					print(messagesSent)
+					print("----Request acked---- after ", messagesSent, " messages")
+
 					return
 				}
 			}
@@ -350,13 +351,13 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 	}
 }
 
-func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string) {
-	sendingTicker := time.NewTicker(100 * time.Millisecond)
+func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int) {
+	sendingTicker := time.NewTicker(200 * time.Millisecond)
 
 	defer sendingTicker.Stop()
 	messagesSent := 0
 	// er vi nødt til å acke ordre gitt i etasje vi allerede er i?
-	print("Sending order")
+	print("------Sending order------")
 	for {
 		select {
 		case <-sendingTicker.C:
@@ -367,9 +368,19 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			floor := message.ButtonEvent.Floor
 
 			if message.ResponisbleElevator == status.ID && (status.Orders[floor][button] || (message.ButtonEvent.Floor == status.PrevFloor && messagesSent > 0)) {
-				fmt.Println("Order acked")
+				print("----Order acked---- after ", messagesSent, " messages")
 				return
 			}
 		}
 	}
+}
+
+func incrementMessage(messageID string) string {
+	nodeID := messageID[:3]
+	messageNumber := messageID[3:]
+	messageNumberInt, _ := strconv.Atoi(messageNumber)
+	messageNumberInt++
+	messageNumber = strconv.Itoa(messageNumberInt)
+	return nodeID + messageNumber
+
 }
