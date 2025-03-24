@@ -3,7 +3,7 @@
 
 
 # Set the variables
-nodeID="1"
+nodeID="11"
 PORT=16001
 
 STARTASPRIM=true
@@ -34,6 +34,7 @@ start_process_supervisor() {
 
 # Start the SimElevatorServer
 start_sim_elevator_server
+
 
 # Start the processSupervisor
 start_process_supervisor

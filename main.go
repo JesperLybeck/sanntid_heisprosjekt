@@ -7,6 +7,7 @@ import (
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"Sanntid/pba"
+
 	"os"
 	"time"
 )
@@ -101,11 +102,12 @@ func main() {
 	elevator.Output.LocalOrders = [fsm.NFloors][fsm.NButtons]bool{}
 	elevator.Input.PrevFloor = elevio.GetFloor()
 	elevator.DoorTimer = time.NewTimer(3 * time.Second)
+	elevator.Output.Door = true
 	elevator.OrderCompleteTimer = time.NewTimer(fsm.OrderTimeout * time.Second)
 	elevator.ObstructionTimer = time.NewTimer(7 * time.Second)
 
 	elevator.ObstructionTimer.Stop()
-	elevator.DoorTimer.Stop()
+	
 	elevator.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.Primary(ID) //starting go routines for primary and backup.
@@ -124,6 +126,7 @@ func main() {
 
 	//-----------------------------MAIN LOOP-----------------------------
 	for {
+		
 		select {
 		case primStatus := <-primStatusRX:
 			//Hva om vi gjør en del av dette her, heller enn i pba?
@@ -134,6 +137,8 @@ func main() {
 			// To register if alone on network and enter offline mode
 			if len(p.Peers) == 0 {
 				fsm.AloneOnNetwork = true
+			} else {
+				fsm.AloneOnNetwork = false
 			}
 		case lights := <-LightUpdateFromPrimRX:
 
@@ -160,8 +165,10 @@ func main() {
 				RequestID:   NumRequests,
 			}
 			// ISSUE! when the order is delegated to a different node, we cant ack on
+			
 			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary, NumRequests)
 			NumRequests++
+			
 
 			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
 				offlineOrder := fsm.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}

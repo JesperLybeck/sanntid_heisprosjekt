@@ -309,6 +309,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 	} else {
 		fmt.Println("Door timer stopped")
 		nextElevator.ObstructionTimer.Stop()
+		nextElevator.Output.Door = false
 	}
 
 	return nextElevator
@@ -318,7 +319,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, message Request, requestID int) {
 
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
-	messageTimer := time.NewTimer(3 * time.Second)
+	messageTimer := time.NewTimer(5 * time.Second)
 
 	defer sendingTicker.Stop()
 
@@ -348,14 +349,16 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 			}
 
 		case <-messageTimer.C:
+			print("No ack received for request, stopping transmission.")
+			//vi trenger ikke å sende error her. vi kan anta bruker trykker på knappen på nytt.
 			return
 
 		}
 	}
 }
 
-func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int) {
-	messageTimer := time.NewTimer(3 * time.Second)
+func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int, ResendChan chan<- Request){
+	messageTimer := time.NewTimer(5 * time.Second)
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
 
 	defer sendingTicker.Stop()
@@ -376,7 +379,15 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 				return
 			}
 		case <-messageTimer.C:
-			return
+			print("failed to send order, resending request")
+			RequestID := message.OrderID
+			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: NodeStatusMap[ID].Orders, RequestID: RequestID}
+			ResendChan <- Reassign
+			return 
+			
+			//kan vi throwe en error her, som sørger for at ordren forsøkes håndtert på nytt? den kan da sendes til en annen node i stedet??
+
+			
 		}
 	}
 }

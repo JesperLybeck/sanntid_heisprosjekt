@@ -4,6 +4,7 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
+	"fmt"
 	"math"
 )
 
@@ -30,26 +31,36 @@ func indexOf(arr []int, value int) int {
 	return -1 // Return -1 if the value is not found
 }
 
-func AssignOrder(request fsm.Order, latestPeerList peers.PeerUpdate) string {
-	if len(latestPeerList.Peers) == 0 {
-		panic("No avaialable elevators")
-	}
-	costs := make([]fsm.CostTuple, len(latestPeerList.Peers)) // costs for each elevator
-	if request.ButtonEvent.Button == elevio.BT_Cab {
-		return request.ResponisbleElevator
-	}
+func AssignOrder(request fsm.Order, peerCh chan peers.PeerUpdate) string {
+	print("assigning order")
+	for {
+		select {
+			case update := <-peerCh:
+				fsm.LatestPeerList = update
+			default:
+				fmt.Print("no peer update: ", fsm.LatestPeerList)
+				costs := make([]fsm.CostTuple, len(fsm.LatestPeerList.Peers)) // costs for each elevator
+				if request.ButtonEvent.Button == elevio.BT_Cab {
+					return request.ResponisbleElevator
+				}
 
-	for p := 0; p < len(latestPeerList.Peers); p++ {
-		peerStatus := fsm.NodeStatusMap[latestPeerList.Peers[p]]
-		costs[p].ID = latestPeerList.Peers[p]
-		distanceCost := (peerStatus.PrevFloor - request.ButtonEvent.Floor) * (peerStatus.PrevFloor - request.ButtonEvent.Floor)
-		//Optional: add directional contribution to cost.
+				for p := 0; p < len(fsm.LatestPeerList.Peers); p++ {
+					peerStatus := fsm.NodeStatusMap[fsm.LatestPeerList.Peers[p]]
+					costs[p].ID = fsm.LatestPeerList.Peers[p]
+					distanceCost := (peerStatus.PrevFloor - request.ButtonEvent.Floor) * (peerStatus.PrevFloor - request.ButtonEvent.Floor)
+					//Optional: add directional contribution to cost.
 
-		costs[p].Cost = distanceCost // + directionCost
+					costs[p].Cost = distanceCost // + directionCost
 
+				}
+				//fmt.Println("costs:", costs)
+				responsibleElevator := argmin(costs)
+				print("Responsible elevator: ", responsibleElevator)
+				if responsibleElevator != "" {
+
+					return responsibleElevator
+				}
+		}
 	}
-	//fmt.Println("costs:", costs)
-	responsibleElevator := argmin(costs)
-	return responsibleElevator
 
 }
