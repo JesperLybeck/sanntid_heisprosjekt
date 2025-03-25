@@ -181,7 +181,7 @@ func chooseDirection(E Elevator) DirectionStatePair {
 }
 
 func HandleNewOrder(order Order, E Elevator) Elevator {
-	print("handling new order")
+	//print("handling new order")
 	wasIdleAtNewOrder := E.State == Idle
 	nextElevator := E
 	nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = true //legger inn den nye ordren.
@@ -339,7 +339,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 
 			floor := message.ButtonEvent.Floor
 			button := message.ButtonEvent.Button
-			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
+			print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
 			for j := 0; j < MElevators; j++ {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 

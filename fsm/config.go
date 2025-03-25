@@ -11,9 +11,10 @@ const NFloors int = 4
 const NButtons int = 3
 const MElevators int = 3
 
-var TakeOverInProgress bool = false
+
 var PrimaryID string = ""
 var BackupID string = ""
+
 var StartingAsPrimary bool = false
 var Version int = 0
 var StoredOrders [MElevators][NFloors][NButtons]bool
@@ -29,10 +30,16 @@ type Status struct {
 	TransmitterID string
 	ReceiverID    string
 	Orders        [MElevators][NFloors][NButtons]bool
-	Version       int
 	Map           map[string]int
 	Peerlist      peers.PeerUpdate
 	StatusID      int
+}
+
+type Election struct{
+	TakeOverInProgress bool
+	LostNodeID string
+	PrimaryID string
+	BackupID string
 }
 
 type Request struct {

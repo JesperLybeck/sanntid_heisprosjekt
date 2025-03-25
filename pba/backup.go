@@ -5,77 +5,25 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/fsm"
 	"fmt"
-	"strconv"
 	"time"
 )
 
-var LatestStatusFromPrimary fsm.Status
 
-func Backup(ID string) {
+
+func Backup(ID string, primaryElection chan<- fsm.Election) {
 	var timeout = time.After(2 * time.Second) // Set timeout duration
 	var primaryStatusRX = make(chan fsm.Status)
 	go bcast.Receiver(13055, primaryStatusRX)
-	LatestStatusFromPrimary := fsm.Status{}
-	isBackup := false
+	print("Backup")
+	
 	for {
-		if !isBackup {
-			select {
-			case p := <-primaryStatusRX:
-
-				//fmt.Println("Backup received from primary")
-
-				if fsm.PrimaryID == ID && p.TransmitterID != ID {
-					intID, _ := strconv.Atoi(ID[len(ID)-2:])
-					intTransmitterID, _ := strconv.Atoi(p.TransmitterID[len(ID)-2:])
-					//Her mottar en primary melding fra en annen primary
-					// Dette er bad med mye pakketap
-					print("MyID", intID, "Transmitter", intTransmitterID)
-
-					fsm.LatestPeerList = p.Peerlist
-					
-					if intID > intTransmitterID {
-						println("Min ID større")
-						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
-						fsm.PrimaryID = ID
-						fsm.BackupID = p.TransmitterID
-
-					} else if intID < intTransmitterID {
-						println("Min ID mindre")
-						fsm.PrimaryID = p.TransmitterID
-						fsm.BackupID = ""
-					}
-
-				} else {
-
-					if p.TransmitterID != ID {
-						fsm.PrimaryID = p.TransmitterID
-					}
-					if p.ReceiverID == ID {
-						fsm.BackupID = ID
-						isBackup = true
-					}
-
-					timeout = time.After(2 * time.Second)
-				} /* else if p.Version > fsm.Version {
-					fmt.Println("Primary version higher. accepting new primary")
-					fsm.Version = p.Version
-					fsm.PrimaryID = p.TransmitterID
-					timeout = time.After(3 * time.Second)
-
-				}*/
-
-			}
-		}
-
 		if fsm.BackupID == ID {
 
 			select {
 			case p := <-primaryStatusRX:
-
-				LatestStatusFromPrimary = p
+				
 				fsm.StoredOrders = p.Orders
 				fsm.IpToIndexMap = p.Map
-				fsm.Version = p.Version
 				fsm.LatestPeerList = p.Peerlist
 
 				timeout = time.After(2 * time.Second)
@@ -85,12 +33,10 @@ func Backup(ID string) {
 				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
 				fmt.Print("LatestPeerlist from prim timeout",fsm.LatestPeerList)
 				fmt.Println("New peerlist", fsm.LatestPeerList)
-				fsm.Version++
-				fsm.PreviousPrimaryID = fsm.PrimaryID
-				fsm.PrimaryID = ID
-				fsm.BackupID = ""
-				isBackup = false
-				fsm.TakeOverInProgress = true
+				takeover := fsm.Election{ TakeOverInProgress: true, LostNodeID: fsm.PrimaryID, PrimaryID: ID, BackupID : ""}
+				//fsm.PrimaryID = ID
+				//fsm.BackupID = ""
+				primaryElection <- takeover
 
 			}
 		}

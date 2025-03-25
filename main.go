@@ -30,21 +30,18 @@ var elevioPortNumber string
 func main() {
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
-	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
+	peersRX := make(chan peers.PeerUpdate)
+	nodeStatusTX := make(chan fsm.SingleElevatorStatus)
+	primStatusRX := make(chan fsm.Status)
 	RequestToPrimTX := make(chan fsm.Request)
 	OrderFromPrimRX := make(chan fsm.Order)
 	OrderCompletedTX := make(chan fsm.Request)
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
-	peersRX := make(chan peers.PeerUpdate)
-	primStatusRX := make(chan fsm.Status)
+	primaryMerge := make(chan fsm.Election)
 
 	buttonPressCh := make(chan elevio.ButtonEvent)
 	floorReachedCh := make(chan int)
 
-	//doorTimeoutCh := make(chan bool)
-
-	//vi skiller mellom intern komunikasjon og kommunikasjon med primary.
-	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
 	statusTicker := time.NewTicker(30 * time.Millisecond)
@@ -89,30 +86,29 @@ func main() {
 			elevio.SetMotorDirection(elevio.MD_Stop)
 			break
 		}
-		time.Sleep(fsm.OrderTimeout * time.Millisecond) // Add small delay between polls
+		time.Sleep(fsm.OrderTimeout * time.Millisecond) 
 	}
-	for j := 0; j < 4; j++ {
-		elevio.SetButtonLamp(elevio.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
-		elevio.SetButtonLamp(elevio.BT_HallDown, j, false)
-		elevio.SetButtonLamp(elevio.BT_Cab, j, false)
-	}
-	//elevator state machine variables are initialized.
-	elevator.State = fsm.Idle                                        //after initializing the elevator, it goes to the idle state.
-	elevator.Input.LocalRequests = [fsm.NFloors][fsm.NButtons]bool{} // not strictly necessary, but...
+	//-----------------------------SETTING UP ELEVATOR STRUCT-----------------------------
+	elevator.State = fsm.Idle                                        
+	elevator.Input.LocalRequests = [fsm.NFloors][fsm.NButtons]bool{} 
 	elevator.Output.LocalOrders = [fsm.NFloors][fsm.NButtons]bool{}
 	elevator.Input.PrevFloor = elevio.GetFloor()
-	elevator.DoorTimer = time.NewTimer(3 * time.Second)
 	elevator.Output.Door = true
 	elevator.OrderCompleteTimer = time.NewTimer(fsm.OrderTimeout * time.Second)
 	elevator.ObstructionTimer = time.NewTimer(7 * time.Second)
+	elevator.DoorTimer = time.NewTimer(3 * time.Second)
 
 	elevator.ObstructionTimer.Stop()
-	
 	elevator.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
-	go pba.Primary(ID) //starting go routines for primary and backup.
-	go pba.Backup(ID)
+	go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
+	go pba.Backup(ID, primaryMerge)
 
+	
+	go pba.RoleElection(ID, primaryMerge)
+
+
+	
 	go elevio.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevio.PollFloorSensor(floorReachedCh)
 	go bcast.Transmitter(13057, RequestToPrimTX) //starting go routines for network communication with other primary.
@@ -128,6 +124,8 @@ func main() {
 	for {
 		
 		select {
+
+		
 		case primStatus := <-primStatusRX:
 			//Hva om vi gjør en del av dette her, heller enn i pba?
 			fsm.IpToIndexMap = primStatus.Map

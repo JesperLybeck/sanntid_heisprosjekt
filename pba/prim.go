@@ -11,7 +11,7 @@ import (
 
 var OrderNumber int = 1
 
-func Primary(ID string) {
+func Primary(ID string, primaryElection <-chan fsm.Election) {
 
 	for {
 		if ID == fsm.PrimaryID {
@@ -37,24 +37,29 @@ func Primary(ID string) {
 			go bcast.Receiver(13059, nodeStatusRX)
 			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(30 * time.Millisecond)
+			ticker := time.NewTicker(200 * time.Millisecond)
 			lightUpdateTicker := time.NewTicker(200 * time.Millisecond)
 
 			for {
 				if ID == fsm.PrimaryID {
-					if fsm.TakeOverInProgress {
-						//do stuff
-
-						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX,requestRX, peersRX)
-						fsm.TakeOverInProgress = false
-					}
+					
 					select {
+					case primaryElection := <-primaryElection:
+						print("PrimaryID",primaryElection.PrimaryID, "BackupID", primaryElection.BackupID)
+						fsm.PrimaryID = primaryElection.PrimaryID
+						fsm.BackupID = primaryElection.BackupID
+						if primaryElection.TakeOverInProgress {
+							//do stuff
+							
+							fsm.StoredOrders = distributeOrdersFromLostNode(primaryElection.LostNodeID, fsm.StoredOrders, orderTX, nodeStatusRX,requestRX, peersRX)
+						
+						}
 					case nodeUpdate := <-nodeStatusRX:
 
 						updateNodeMap(nodeUpdate.ID, nodeUpdate)
 					case p := <-peersRX:
 						print("new peer update")
-						fsm.AloneOnNetwork = false
+						
 						fmt.Println("Peerupdate in prim, change of LatestPeerList")
 						fsm.LatestPeerList = p
 
@@ -112,8 +117,7 @@ func Primary(ID string) {
 
 					case <-ticker.C:
 						//sending status to backup
-
-						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
+						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
 						//periodic light update to nodes.
 
 						//when it is time to send light update:
@@ -134,7 +138,7 @@ func Primary(ID string) {
 
 
 					case a := <-requestRX:
-						print("new order from request")
+			
 						
 
 						//Hall assignment
@@ -142,17 +146,21 @@ func Primary(ID string) {
 							continue
 						}*/
 						//Update StoredOrders
-
+						
 						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
+						
 						if lastMessageNumber == a.RequestID {
-							print("anti spam request")
+							//print("anti spam request")
 							continue
 						}
+						
 
 						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
-						
+					
 						responsibleElevator := AssignOrder(order, peersRX)
-						print("responsible elevator", responsibleElevator)
+						
+
+						
 						order.ResponisbleElevator = responsibleElevator
 
 						responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
@@ -165,7 +173,7 @@ func Primary(ID string) {
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
 						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID, OrderNumber,requestRX)
-						print("new order from request")
+						
 						OrderNumber++
 						fsm.LastMessagesMap[a.ID] = a.RequestID
 

@@ -39,7 +39,6 @@ func AssignOrder(request fsm.Order, peerCh chan peers.PeerUpdate) string {
 				fsm.LatestPeerList = update
 				fmt.Println("Peerupdate in assigner, change of LatestPeerList")
 			default:
-				fmt.Print("no peer update: ", fsm.LatestPeerList)
 				costs := make([]fsm.CostTuple, len(fsm.LatestPeerList.Peers)) // costs for each elevator
 				if request.ButtonEvent.Button == elevio.BT_Cab {
 					return request.ResponisbleElevator
