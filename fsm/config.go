@@ -21,7 +21,7 @@ var IpToIndexMap = make(map[string]int)
 var LatestPeerList peers.PeerUpdate
 var NodeStatusMap = make(map[string]SingleElevatorStatus)
 var PreviousPrimaryID string
-var OrderTimeout time.Duration = 7
+var OrderTimeout time.Duration = 5
 var AloneOnNetwork bool = false
 var LastMessagesMap = make(map[string]int)
 

@@ -28,8 +28,11 @@ func Backup(ID string) {
 					intID, _ := strconv.Atoi(ID[len(ID)-2:])
 					intTransmitterID, _ := strconv.Atoi(p.TransmitterID[len(ID)-2:])
 					//Her mottar en primary melding fra en annen primary
+					// Dette er bad med mye pakketap
 					print("MyID", intID, "Transmitter", intTransmitterID)
+
 					fsm.LatestPeerList = p.Peerlist
+					
 					if intID > intTransmitterID {
 						println("Min ID større")
 						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
@@ -80,6 +83,7 @@ func Backup(ID string) {
 			case <-timeout:
 				fmt.Println("Primary timed out")
 				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
+				fmt.Print("LatestPeerlist from prim timeout",fsm.LatestPeerList)
 				fmt.Println("New peerlist", fsm.LatestPeerList)
 				fsm.Version++
 				fsm.PreviousPrimaryID = fsm.PrimaryID

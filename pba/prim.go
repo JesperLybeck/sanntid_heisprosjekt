@@ -38,7 +38,7 @@ func Primary(ID string) {
 			go bcast.Transmitter(13060, TXLightUpdates)
 
 			ticker := time.NewTicker(30 * time.Millisecond)
-			lightUpdateTicker := time.NewTicker(100 * time.Millisecond)
+			lightUpdateTicker := time.NewTicker(200 * time.Millisecond)
 
 			for {
 				if ID == fsm.PrimaryID {
@@ -55,6 +55,7 @@ func Primary(ID string) {
 					case p := <-peersRX:
 						print("new peer update")
 						fsm.AloneOnNetwork = false
+						fmt.Println("Peerupdate in prim, change of LatestPeerList")
 						fsm.LatestPeerList = p
 
 						if fsm.BackupID == "" && len(p.Peers) > 1 {
@@ -120,14 +121,14 @@ func Primary(ID string) {
 						
 						
 					case <-lightUpdateTicker.C:
-						for i := 0; i < len(fsm.LatestPeerList.Peers); i++ {
+						for i := 0; i < len(fsm.IpToIndexMap); i++ {
 							//compute the new lightmatrix given the stored orders.
-							lightUpdate := makeLightMatrix(fsm.LatestPeerList.Peers[i])
+							lightUpdate := makeLightMatrix(searchMap(i))
 							//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
 
 							//if the new lightmatrix is different from the previous lights for the node:
 
-							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: fsm.LatestPeerList.Peers[i]}
+							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: searchMap(i)}
 							//send out the updated lightmatrix to the node.
 						}
 
@@ -149,10 +150,7 @@ func Primary(ID string) {
 						}
 
 						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
-						if len(fsm.LatestPeerList.Peers) == 0 {
-							print("no peers, returning")
-							continue
-						}
+						
 						responsibleElevator := AssignOrder(order, peersRX)
 						print("responsible elevator", responsibleElevator)
 						order.ResponisbleElevator = responsibleElevator
@@ -184,9 +182,7 @@ func Primary(ID string) {
 
 							fsm.StoredOrders = updateOrders(a.Orders, index)
 
-							lightUpdate := makeLightMatrix(a.ID)
-
-							TXLightUpdates <- fsm.LightUpdate{LightArray: lightUpdate, ID: a.ID}
+						
 							fsm.LastMessagesMap[a.ID] = a.RequestID
 						}
 

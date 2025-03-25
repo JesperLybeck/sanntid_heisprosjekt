@@ -144,15 +144,17 @@ func main() {
 
 			//when light update is received from primary, the node updates its own lights with the newest information.
 			if (fsm.LightsDifferent(prevLightMatrix, lights.LightArray)) && lights.ID == ID {
+				print("---------------- Lights are Different ----------------------")
 
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
 						elevio.SetButtonLamp(elevio.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
-
+						
 					}
-
-					prevLightMatrix = lights.LightArray
+					
 				}
+				prevLightMatrix = lights.LightArray
+				
 			}
 
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
@@ -175,6 +177,7 @@ func main() {
 				elevator = fsm.HandleNewOrder(offlineOrder, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevio.SetButtonLamp(elevio.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(elevator)
+				print("Offline order received")
 			}
 
 			//vi diskuterte om vi trengte å ha egen case for cab. Vi kom frem til at det ikke trengs fordi:

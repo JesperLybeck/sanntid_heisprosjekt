@@ -37,6 +37,7 @@ func AssignOrder(request fsm.Order, peerCh chan peers.PeerUpdate) string {
 		select {
 			case update := <-peerCh:
 				fsm.LatestPeerList = update
+				fmt.Println("Peerupdate in assigner, change of LatestPeerList")
 			default:
 				fmt.Print("no peer update: ", fsm.LatestPeerList)
 				costs := make([]fsm.CostTuple, len(fsm.LatestPeerList.Peers)) // costs for each elevator

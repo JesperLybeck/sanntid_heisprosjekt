@@ -300,9 +300,10 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
 	}
 	if nextElevator.DoorObstructed {
-
+		print("Door obstructed")
 		nextElevator.Output.Door = true
 		nextElevator.State = DoorOpen
+		nextElevator.Output.MotorDirection = elevio.MD_Stop
 		nextElevator.DoorTimer.Reset(4 * time.Second)
 		nextElevator.OrderCompleteTimer.Reset(OrderTimeout * time.Second)
 
@@ -326,7 +327,6 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 	//dette betyr at andre noder kan acke ordre som ikke er til dem?
 
 	messagesSent := 0
-	print("------Sending request update-->", requestID, "<------")
 
 	for {
 		select {
@@ -342,7 +342,6 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
 			for j := 0; j < MElevators; j++ {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
-					print("----Request acked-->", requestID, "<----after ", messagesSent, " messages")
 
 					return
 				}
@@ -364,7 +363,6 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 	defer sendingTicker.Stop()
 	messagesSent := 0
 	// er vi nødt til å acke ordre gitt i etasje vi allerede er i?
-	print("------Sending Order update-->", OrderID, "<------")
 	for {
 		select {
 		case <-sendingTicker.C:
@@ -375,11 +373,9 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			floor := message.ButtonEvent.Floor
 
 			if message.ResponisbleElevator == status.ID && (status.Orders[floor][button] || (message.ButtonEvent.Floor == status.PrevFloor && messagesSent > 0)) {
-				print("----Order acked-->", OrderID, "<----after ", messagesSent, " messages")
 				return
 			}
 		case <-messageTimer.C:
-			print("failed to send order, resending request")
 			RequestID := message.OrderID
 			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: NodeStatusMap[ID].Orders, RequestID: RequestID}
 			ResendChan <- Reassign
