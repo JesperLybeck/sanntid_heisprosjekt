@@ -80,7 +80,7 @@ enum Impairment[Preset] presets = [
     Preset.medium:  Impairment(loss:10, lossCorr:30, delay:20, jitter:5,  reorder:1),
     Preset.heavy:   Impairment(loss:25, lossCorr:50, delay:30, jitter:10, reorder:2,  duplicate:1),
     Preset.extreme: Impairment(loss:35, lossCorr:50, delay:40, jitter:15, reorder:4,  duplicate:2),
-    Preset.absurd:  Impairment(loss:50, lossCorr:60, delay:80, jitter:40, reorder:10, duplicate:10),
+    Preset.absurd:  Impairment(loss:90, lossCorr:60, delay:80, jitter:40, reorder:10, duplicate:10),
 ];
 
 void main(string[] args){
@@ -97,6 +97,7 @@ void main(string[] args){
     
     try {
         auto argsCpy = args.dup;
+        arraySep = ",";
         argsCpy.getopt(std.getopt.config.passThrough,
             "h|help",               &help,
             "l|list",               &list,

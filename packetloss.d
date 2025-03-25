@@ -28,7 +28,7 @@ Examples:
     sudo packetloss -p 12345,23456,34567 -r 0.25
         Applies 25% packet loss to ports 12345, 23456, and 34567
         
-    
+    sudo packetloss -n executablename -r 0.25
         Applies 25% packet loss to all ports used by all programs named "executablename"
         
     sudo packetloss -p 12345 -n executablename -r 0.25

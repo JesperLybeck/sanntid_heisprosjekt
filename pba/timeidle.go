@@ -1,7 +1,6 @@
 package pba
 
 import (
-	"Network-go/network/peers"
 	"Sanntid/elevio"
 	"Sanntid/fsm"
 	"fmt"
@@ -31,13 +30,15 @@ func indexOf(arr []int, value int) int {
 	return -1 // Return -1 if the value is not found
 }
 
-func AssignOrder(request fsm.Order, peerCh chan peers.PeerUpdate) string {
+func AssignOrder(request fsm.Order) string {
 	print("assigning order")
 	for {
 		select {
+			/*
 			case update := <-peerCh:
 				fsm.LatestPeerList = update
 				fmt.Println("Peerupdate in assigner, change of LatestPeerList")
+				*/
 			default:
 				fmt.Print("no peer update: ", fsm.LatestPeerList)
 				costs := make([]fsm.CostTuple, len(fsm.LatestPeerList.Peers)) // costs for each elevator

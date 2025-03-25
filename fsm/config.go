@@ -35,6 +35,12 @@ type Status struct {
 	StatusID      int
 }
 
+type Election struct{
+	TakeOverInProgress bool
+	LostNodeID string
+	PrimaryID string
+	BackupID string
+}
 type Request struct {
 	ButtonEvent elevio.ButtonEvent
 	ID          string

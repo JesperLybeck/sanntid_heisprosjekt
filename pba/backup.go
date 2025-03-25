@@ -5,11 +5,48 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/fsm"
 	"fmt"
-	"strconv"
 	"time"
 )
 
 var LatestStatusFromPrimary fsm.Status
+
+func Backup(ID string, primaryElection chan<- fsm.Election) {
+	var timeout = time.After(2 * time.Second) // Set timeout duration
+	var primaryStatusRX = make(chan fsm.Status)
+	go bcast.Receiver(13055, primaryStatusRX)
+	print("Backup")
+	
+	for {
+		if fsm.BackupID == ID {
+
+			select {
+			case p := <-primaryStatusRX:
+				//print("I am backup")
+				fsm.StoredOrders = p.Orders
+				fsm.IpToIndexMap = p.Map
+				fsm.LatestPeerList = p.Peerlist
+
+				timeout = time.After(2 * time.Second)
+
+			case <-timeout:
+				fmt.Println("Primary timed out")
+				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
+				fmt.Print("LatestPeerlist from prim timeout",fsm.LatestPeerList)
+				fmt.Println("New peerlist", fsm.LatestPeerList)
+				fsm.Version++
+				fsm.PreviousPrimaryID = fsm.PrimaryID
+				fsm.PrimaryID = ID
+				fsm.BackupID = ""
+				fsm.TakeOverInProgress = true
+				
+
+			}
+		}
+	}
+
+}
+
+/*
 
 func Backup(ID string) {
 	var timeout = time.After(2 * time.Second) // Set timeout duration
@@ -56,13 +93,13 @@ func Backup(ID string) {
 					}
 
 					timeout = time.After(2 * time.Second)
-				} /* else if p.Version > fsm.Version {
+				}  else if p.Version > fsm.Version {
 					fmt.Println("Primary version higher. accepting new primary")
 					fsm.Version = p.Version
 					fsm.PrimaryID = p.TransmitterID
 					timeout = time.After(3 * time.Second)
 
-				}*/
+				}
 
 			}
 		}
@@ -81,22 +118,14 @@ func Backup(ID string) {
 				timeout = time.After(2 * time.Second)
 
 			case <-timeout:
-				fmt.Println("Primary timed out")
-				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
-				fmt.Print("LatestPeerlist from prim timeout",fsm.LatestPeerList)
-				fmt.Println("New peerlist", fsm.LatestPeerList)
-				fsm.Version++
-				fsm.PreviousPrimaryID = fsm.PrimaryID
-				fsm.PrimaryID = ID
-				fsm.BackupID = ""
-				isBackup = false
-				fsm.TakeOverInProgress = true
+				
 
 			}
 		}
 	}
 
 }
+*/
 
 func mergeOrders(orders1 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orders2 [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
 	var mergedOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool

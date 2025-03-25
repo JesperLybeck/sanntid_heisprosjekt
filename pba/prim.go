@@ -11,7 +11,7 @@ import (
 
 var OrderNumber int = 1
 
-func Primary(ID string) {
+func Primary(ID string, primaryElection <-chan fsm.Election) {
 
 	for {
 		if ID == fsm.PrimaryID {
@@ -37,7 +37,7 @@ func Primary(ID string) {
 			go bcast.Receiver(13059, nodeStatusRX)
 			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(30 * time.Millisecond)
+			ticker := time.NewTicker(100 * time.Millisecond)
 			lightUpdateTicker := time.NewTicker(200 * time.Millisecond)
 
 			for {
@@ -45,10 +45,17 @@ func Primary(ID string) {
 					if fsm.TakeOverInProgress {
 						//do stuff
 
-						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX,requestRX, peersRX)
+						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX,requestRX)
 						fsm.TakeOverInProgress = false
 					}
 					select {
+					case p := <- primaryElection:
+						fmt.Print(p)
+						
+						fsm.PrimaryID = p.PrimaryID
+						fsm.BackupID = p.BackupID
+						
+
 					case nodeUpdate := <-nodeStatusRX:
 
 						updateNodeMap(nodeUpdate.ID, nodeUpdate)
@@ -95,7 +102,7 @@ func Primary(ID string) {
 						for i := 0; i < len(p.Lost); i++ {
 							//alle som dør
 
-							//fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX, nodeStatusRX)
+							fsm.StoredOrders = distributeOrdersFromLostNode(p.Lost[i], fsm.StoredOrders, orderTX, nodeStatusRX, requestRX)
 
 							//hvis backup dør
 							if p.Lost[i] == fsm.BackupID {
@@ -121,6 +128,7 @@ func Primary(ID string) {
 						
 						
 					case <-lightUpdateTicker.C:
+						
 						for i := 0; i < len(fsm.IpToIndexMap); i++ {
 							//compute the new lightmatrix given the stored orders.
 							lightUpdate := makeLightMatrix(searchMap(i))
@@ -151,7 +159,7 @@ func Primary(ID string) {
 
 						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
 						
-						responsibleElevator := AssignOrder(order, peersRX)
+						responsibleElevator := AssignOrder(order)
 						print("responsible elevator", responsibleElevator)
 						order.ResponisbleElevator = responsibleElevator
 
@@ -295,7 +303,7 @@ func makeLightMatrix(ID string) [fsm.NFloors][fsm.NButtons]bool {
 	return lightMatrix
 }
 
-func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orderTX chan<- fsm.Order, ackChan <-chan fsm.SingleElevatorStatus, resendChan chan fsm.Request, peerUpdate chan peers.PeerUpdate) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
+func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orderTX chan<- fsm.Order, ackChan <-chan fsm.SingleElevatorStatus, resendChan chan fsm.Request) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
 	distributedOrders := StoredOrders
 	lostNodeIndex, _ := getIndex(lostNodeID)
 
@@ -304,7 +312,7 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 		for j := 0; j < fsm.NButtons-1; j++ {
 			if lostOrders[i][j] {
 				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ResponisbleElevator: "", OrderID: OrderNumber}
-				responsibleElevator := AssignOrder(lostOrder, peerUpdate)
+				responsibleElevator := AssignOrder(lostOrder)
 				lostOrder.ResponisbleElevator = responsibleElevator
 
 				distributedOrders[lostNodeIndex][i][j] = false

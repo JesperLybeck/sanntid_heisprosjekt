@@ -40,6 +40,7 @@ func main() {
 
 	buttonPressCh := make(chan elevio.ButtonEvent)
 	floorReachedCh := make(chan int)
+	primaryMerge := make(chan fsm.Election)
 
 	//doorTimeoutCh := make(chan bool)
 
@@ -110,8 +111,9 @@ func main() {
 	
 	elevator.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
-	go pba.Primary(ID) //starting go routines for primary and backup.
-	go pba.Backup(ID)
+	go pba.RoleElection(ID, primaryMerge)
+	go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
+	go pba.Backup(ID, primaryMerge)
 
 	go elevio.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevio.PollFloorSensor(floorReachedCh)
@@ -144,7 +146,7 @@ func main() {
 
 			//when light update is received from primary, the node updates its own lights with the newest information.
 			if (fsm.LightsDifferent(prevLightMatrix, lights.LightArray)) && lights.ID == ID {
-				print("---------------- Lights are Different ----------------------")
+			
 
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
