@@ -3,8 +3,8 @@
 
 
 # Set the variables
-nodeID="33"
-PORT=16003
+nodeID="22"
+PORT=16002
 
 STARTASPRIM=false
 

@@ -28,6 +28,7 @@ var startingAsPrimary bool
 var elevioPortNumber string
 
 func main() {
+	var lastClearedButtons []elevio.ButtonEvent
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
 	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
@@ -36,7 +37,6 @@ func main() {
 	OrderCompletedTX := make(chan fsm.Request)
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
 	peersRX := make(chan peers.PeerUpdate)
-	primStatusRX := make(chan fsm.Status)
 
 	buttonPressCh := make(chan elevio.ButtonEvent)
 	floorReachedCh := make(chan int)
@@ -108,7 +108,7 @@ func main() {
 	elevator.ObstructionTimer = time.NewTimer(7 * time.Second)
 
 	elevator.ObstructionTimer.Stop()
-	
+
 	elevator.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.RoleElection(ID, primaryMerge)
@@ -124,16 +124,15 @@ func main() {
 	go bcast.Receiver(13060, LightUpdateFromPrimRX)
 	go peers.Transmitter(12055, ID, peerTX)
 	go peers.Receiver(12055, peersRX)
-	go bcast.Receiver(13055, primStatusRX)
 
 	//-----------------------------MAIN LOOP-----------------------------
 	for {
-		
+
 		select {
-		case primStatus := <-primStatusRX:
-			//Hva om vi gjør en del av dette her, heller enn i pba?
-			fsm.IpToIndexMap = primStatus.Map
-			fsm.LatestPeerList = primStatus.Peerlist
+		/*case primStatus := <-primStatusRX:
+		//Hva om vi gjør en del av dette her, heller enn i pba?
+		fsm.IpToIndexMap = primStatus.Map
+		fsm.LatestPeerList = primStatus.Peerlist	*/
 
 		case p := <-peersRX: //vi klarer oss vell uten denne, med casen over?
 			// To register if alone on network and enter offline mode
@@ -146,17 +145,16 @@ func main() {
 
 			//when light update is received from primary, the node updates its own lights with the newest information.
 			if (fsm.LightsDifferent(prevLightMatrix, lights.LightArray)) && lights.ID == ID {
-			
 
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
 						elevio.SetButtonLamp(elevio.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
-						
+
 					}
-					
+
 				}
 				prevLightMatrix = lights.LightArray
-				
+
 			}
 
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
@@ -169,10 +167,9 @@ func main() {
 				RequestID:   NumRequests,
 			}
 			// ISSUE! when the order is delegated to a different node, we cant ack on
-			
-			go fsm.SendRequestUpdate(RequestToPrimTX, primStatusRX, requestToPrimary, NumRequests)
+
+			go fsm.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests)
 			NumRequests++
-			
 
 			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
 				offlineOrder := fsm.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
@@ -204,7 +201,9 @@ func main() {
 
 		case a := <-floorReachedCh:
 
+			temp := elevator
 			elevator = fsm.HandleFloorReached(a, elevator)
+			lastClearedButtons = LastClearedButtons(temp, elevator)
 
 			setHardwareEffects(elevator)
 
@@ -220,16 +219,19 @@ func main() {
 
 			setHardwareEffects(elevator)
 
-			orderMessage := fsm.Request{ButtonEvent: elevio.ButtonEvent{Floor: elevio.GetFloor()},
-				ID:        ID,
-				TargetID:  fsm.PrimaryID,
-				Orders:    elevator.Output.LocalOrders,
-				RequestID: NumRequests}
-
 			elevator.OrderCompleteTimer.Stop()
 			print("sending order complete message")
-			go fsm.SendRequestUpdate(OrderCompletedTX, primStatusRX, orderMessage, NumRequests)
-			NumRequests++
+
+			for i := range lastClearedButtons {
+				orderMessage := fsm.Request{ButtonEvent: lastClearedButtons[i],
+					ID:        ID,
+					TargetID:  fsm.PrimaryID,
+					Orders:    elevator.Output.LocalOrders,
+					RequestID: NumRequests}
+
+				go fsm.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests)
+				NumRequests++
+			}
 
 		case <-elevator.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
@@ -239,10 +241,24 @@ func main() {
 			panic("Node failed to complete order, door obstruction")
 		case <-statusTicker.C:
 
-			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevio.GetFloor(), MotorDirection: elevator.Output.MotorDirection, Orders: elevator.Output.LocalOrders}
+			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevator.Input.PrevFloor, MotorDirection: elevator.Output.MotorDirection, Orders: elevator.Output.LocalOrders}
 
 		}
 
 	}
 
+}
+
+func LastClearedButtons(e fsm.Elevator, b fsm.Elevator) []elevio.ButtonEvent {
+	lcb := []elevio.ButtonEvent{}
+	order1 := e.Output.LocalOrders
+	order2 := b.Output.LocalOrders
+	for i := 0; i < fsm.NFloors; i++ {
+		for j := 0; j < fsm.NButtons; j++ {
+			if order1[i][j] != order2[i][j] {
+				lcb = append(lcb, elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)})
+			}
+		}
+	}
+	return lcb
 }

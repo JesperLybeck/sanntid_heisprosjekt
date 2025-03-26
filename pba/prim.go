@@ -37,24 +37,23 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 			go bcast.Receiver(13059, nodeStatusRX)
 			go bcast.Transmitter(13060, TXLightUpdates)
 
-			ticker := time.NewTicker(100 * time.Millisecond)
-			lightUpdateTicker := time.NewTicker(200 * time.Millisecond)
+			ticker := time.NewTicker(30 * time.Millisecond)
+			lightUpdateTicker := time.NewTicker(50 * time.Millisecond)
 
 			for {
 				if ID == fsm.PrimaryID {
 					if fsm.TakeOverInProgress {
 						//do stuff
 
-						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX,requestRX)
+						fsm.StoredOrders = distributeOrdersFromLostNode(fsm.PreviousPrimaryID, fsm.StoredOrders, orderTX, nodeStatusRX, requestRX)
 						fsm.TakeOverInProgress = false
 					}
 					select {
-					case p := <- primaryElection:
+					case p := <-primaryElection:
 						fmt.Print(p)
-						
+
 						fsm.PrimaryID = p.PrimaryID
 						fsm.BackupID = p.BackupID
-						
 
 					case nodeUpdate := <-nodeStatusRX:
 
@@ -73,8 +72,8 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 							}
 						}
 
-						if string(p.New) != "" {
-							index, exists := getOrAssignIndex(string(p.New))
+						if p.New != "" {
+							index, exists := getOrAssignIndex(p.New)
 
 							if exists {
 								// Retrieve CAB calls.
@@ -82,15 +81,16 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 								//Hvis vi finner at det er lagret cab calls for denne heisen som ikke er gjort her i remote, så trigger vi en ny ordre .
 								for i := 0; i < fsm.NFloors; i++ {
 
-									if fsm.StoredOrders[index][i][2] {
+									if fsm.StoredOrders[index][i][elevio.BT_Cab] {
 
 										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.BT_Cab},
-											ResponisbleElevator: string(p.New),
+											ResponisbleElevator: p.New,
 											OrderID:             OrderNumber,
 										}
 										print("new order from restore cab calls")
-										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, ID, OrderNumber,requestRX)
-										
+										print("----------searchmapindex:-------->", searchMap(index), "<------")
+										go fsm.SendOrder(orderTX, nodeStatusRX, newOrder, searchMap(index), OrderNumber, requestRX)
+
 										OrderNumber++
 
 									}
@@ -120,15 +120,14 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 					case <-ticker.C:
 						//sending status to backup
 
-						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap, Peerlist: fsm.LatestPeerList}
+						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap}
 						//periodic light update to nodes.
 
 						//when it is time to send light update:
 						// for each node that is active:
-						
-						
+
 					case <-lightUpdateTicker.C:
-						
+
 						for i := 0; i < len(fsm.IpToIndexMap); i++ {
 							//compute the new lightmatrix given the stored orders.
 							lightUpdate := makeLightMatrix(searchMap(i))
@@ -140,10 +139,7 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 							//send out the updated lightmatrix to the node.
 						}
 
-
 					case a := <-requestRX:
-						print("new order from request")
-						
 
 						//Hall assignment
 						/*if hallCallAssigned(a) {
@@ -153,12 +149,11 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 
 						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
 						if lastMessageNumber == a.RequestID {
-							print("anti spam request")
 							continue
 						}
 
 						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
-						
+
 						responsibleElevator := AssignOrder(order)
 						print("responsible elevator", responsibleElevator)
 						order.ResponisbleElevator = responsibleElevator
@@ -172,12 +167,14 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 
 						//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
-						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID, OrderNumber,requestRX)
+						go fsm.SendOrder(orderTX, nodeStatusRX, newMessage, ID, OrderNumber, requestRX)
 						print("new order from request")
 						OrderNumber++
 						fsm.LastMessagesMap[a.ID] = a.RequestID
 
 					case a := <-RXFloorReached:
+
+						fmt.Println(a)
 
 						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
 						if lastMessageNumber == a.RequestID {
@@ -190,7 +187,6 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 
 							fsm.StoredOrders = updateOrders(a.Orders, index)
 
-						
 							fsm.LastMessagesMap[a.ID] = a.RequestID
 						}
 
@@ -242,10 +238,7 @@ func getOrAssignIndex(ip string) (int, bool) {
 		return index, true
 	} else {
 
-		
 		fsm.IpToIndexMap[ip] = len(fsm.IpToIndexMap)
-
-
 
 		return fsm.IpToIndexMap[ip], false
 	}
@@ -305,7 +298,7 @@ func makeLightMatrix(ID string) [fsm.NFloors][fsm.NButtons]bool {
 
 func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool, orderTX chan<- fsm.Order, ackChan <-chan fsm.SingleElevatorStatus, resendChan chan fsm.Request) [fsm.MElevators][fsm.NFloors][fsm.NButtons]bool {
 	distributedOrders := StoredOrders
-	lostNodeIndex, _ := getIndex(lostNodeID)
+	lostNodeIndex, _ := getOrAssignIndex(lostNodeID)
 
 	lostOrders := StoredOrders[lostNodeIndex]
 	for i := 0; i < fsm.NFloors; i++ {
@@ -320,7 +313,7 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator)
 				distributedOrders[responsibleElevatorIndex][i][j] = true
 				print("new order from lost node")
-				go fsm.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator, OrderNumber,resendChan)
+				go fsm.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator, OrderNumber, resendChan)
 				OrderNumber++
 
 			}

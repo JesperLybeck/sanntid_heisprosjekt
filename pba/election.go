@@ -25,7 +25,7 @@ func RoleElection(ID string, primaryElection chan<- fsm.Election) {
 				// Dette er bad med mye pakketap
 				print("MyID", intID, "Transmitter", intTransmitterID)
 
-				fsm.LatestPeerList = p.Peerlist
+				
 					
 				if intID > intTransmitterID {
 					println("Min ID større")

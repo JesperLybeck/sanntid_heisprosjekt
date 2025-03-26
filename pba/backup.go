@@ -5,45 +5,57 @@ import (
 	"Network-go/network/peers"
 	"Sanntid/fsm"
 	"fmt"
-	"time"
 )
 
 var LatestStatusFromPrimary fsm.Status
 
 func Backup(ID string, primaryElection chan<- fsm.Election) {
-	var timeout = time.After(2 * time.Second) // Set timeout duration
+	// Set timeout duration
 	var primaryStatusRX = make(chan fsm.Status)
+	var peerUpdateRX = make(chan peers.PeerUpdate)
+
 	go bcast.Receiver(13055, primaryStatusRX)
+	go peers.Receiver(12055, peerUpdateRX)
 	print("Backup")
-	
+
 	for {
-		if fsm.BackupID == ID {
+		if fsm.PrimaryID != ID {
 
 			select {
+
+			case p := <-peerUpdateRX:
+				fsm.LatestPeerList = p
+				if primInPeersLost(fsm.PrimaryID, p) {
+					fmt.Println("Primary timed out")
+					fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
+					fmt.Print("LatestPeerlist from prim timeout", fsm.LatestPeerList)
+					fmt.Println("New peerlist", fsm.LatestPeerList)
+					fsm.Version++
+					fsm.PreviousPrimaryID = fsm.PrimaryID
+					fsm.PrimaryID = ID
+					fsm.BackupID = ""
+					fsm.TakeOverInProgress = true
+
+				}
+
 			case p := <-primaryStatusRX:
 				//print("I am backup")
 				fsm.StoredOrders = p.Orders
 				fsm.IpToIndexMap = p.Map
-				fsm.LatestPeerList = p.Peerlist
-
-				timeout = time.After(2 * time.Second)
-
-			case <-timeout:
-				fmt.Println("Primary timed out")
-				fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
-				fmt.Print("LatestPeerlist from prim timeout",fsm.LatestPeerList)
-				fmt.Println("New peerlist", fsm.LatestPeerList)
-				fsm.Version++
-				fsm.PreviousPrimaryID = fsm.PrimaryID
-				fsm.PrimaryID = ID
-				fsm.BackupID = ""
-				fsm.TakeOverInProgress = true
-				
 
 			}
 		}
 	}
 
+}
+
+func primInPeersLost(primID string, peerUpdate peers.PeerUpdate) bool {
+	for i := 0; i < len(peerUpdate.Lost); i++ {
+		if peerUpdate.Lost[i] == primID {
+			return true
+		}
+	}
+	return false
 }
 
 /*
@@ -69,7 +81,7 @@ func Backup(ID string) {
 					print("MyID", intID, "Transmitter", intTransmitterID)
 
 					fsm.LatestPeerList = p.Peerlist
-					
+
 					if intID > intTransmitterID {
 						println("Min ID større")
 						fsm.StoredOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders)
@@ -118,7 +130,7 @@ func Backup(ID string) {
 				timeout = time.After(2 * time.Second)
 
 			case <-timeout:
-				
+
 
 			}
 		}

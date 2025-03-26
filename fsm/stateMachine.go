@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"Network-go/network/bcast"
 	"Sanntid/elevio"
 	"fmt"
 	"strconv"
@@ -106,7 +107,7 @@ func shouldClearImmediately(E Elevator, btnEvent elevio.ButtonEvent) bool {
 
 }
 
-func clearAtFloor(E Elevator) Elevator {
+func ClearAtFloor(E Elevator) Elevator {
 
 	nextElevator := E
 	nextElevator.Output.LocalOrders[E.Input.PrevFloor][elevio.BT_Cab] = false
@@ -181,7 +182,6 @@ func chooseDirection(E Elevator) DirectionStatePair {
 }
 
 func HandleNewOrder(order Order, E Elevator) Elevator {
-	print("handling new order")
 	wasIdleAtNewOrder := E.State == Idle
 	nextElevator := E
 	nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = true //legger inn den nye ordren.
@@ -215,7 +215,7 @@ func HandleNewOrder(order Order, E Elevator) Elevator {
 			print("Clearing order immediately, resetting obstruction timer")
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
-			nextElevator = clearAtFloor(nextElevator)
+			nextElevator = ClearAtFloor(nextElevator)
 		}
 
 		nextElevator.Output.MotorDirection = DirectionStatePair.Direction
@@ -243,7 +243,7 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 		if shouldStop(nextElevator) {
 
 			nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
-			nextElevator = clearAtFloor(nextElevator)
+			nextElevator = ClearAtFloor(nextElevator)
 			nextElevator.Output.MotorDirection = elevio.MD_Stop
 			nextElevator.Output.Door = true
 
@@ -285,7 +285,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		case DoorOpen:
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
-			nextElevator = clearAtFloor(nextElevator)
+			nextElevator = ClearAtFloor(nextElevator)
 			//men door open til door open):
 		case Idle:
 			nextElevator.Output.Door = false
@@ -317,16 +317,21 @@ func HandleDoorTimeout(E Elevator) Elevator {
 }
 
 // vi kan kalle disse som go routines der vi sender requests, til prim, og bekrefter utførte ordre.
-func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, message Request, requestID int) {
+func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestID int) {
+
+	primStatusRX := make(chan Status)
+	go bcast.Receiver(13055, primStatusRX)
 
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
-	messageTimer := time.NewTimer(5 * time.Second)
+	messageTimer := time.NewTimer(10 * time.Second)
 
 	defer sendingTicker.Stop()
 
 	//dette betyr at andre noder kan acke ordre som ikke er til dem?
 
 	messagesSent := 0
+
+	print("---------Sending request update---------")
 
 	for {
 		select {
@@ -335,16 +340,17 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 			transmitterChan <- message
 			messagesSent++
 
-		case status := <-ackChan: //kan dette skje på samme melding?
+		case status := <-primStatusRX: //kan dette skje på samme melding?
 
 			floor := message.ButtonEvent.Floor
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
-			for j := 0; j < MElevators; j++ {
-				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
+			j := IpToIndexMap[message.ID]
 
-					return
-				}
+			if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
+
+				print("--------- Request acked ---------")
+				return
 			}
 
 		case <-messageTimer.C:
@@ -356,7 +362,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, ackChan <-chan Status, me
 	}
 }
 
-func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int, ResendChan chan<- Request){
+func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int, ResendChan chan<- Request) {
 	messageTimer := time.NewTimer(5 * time.Second)
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
 
@@ -379,11 +385,10 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			RequestID := message.OrderID
 			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: NodeStatusMap[ID].Orders, RequestID: RequestID}
 			ResendChan <- Reassign
-			return 
-			
+			return
+
 			//kan vi throwe en error her, som sørger for at ordren forsøkes håndtert på nytt? den kan da sendes til en annen node i stedet??
 
-			
 		}
 	}
 }

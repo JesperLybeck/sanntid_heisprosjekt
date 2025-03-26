@@ -31,15 +31,14 @@ type Status struct {
 	Orders        [MElevators][NFloors][NButtons]bool
 	Version       int
 	Map           map[string]int
-	Peerlist      peers.PeerUpdate
 	StatusID      int
 }
 
-type Election struct{
+type Election struct {
 	TakeOverInProgress bool
-	LostNodeID string
-	PrimaryID string
-	BackupID string
+	LostNodeID         string
+	PrimaryID          string
+	BackupID           string
 }
 type Request struct {
 	ButtonEvent elevio.ButtonEvent
