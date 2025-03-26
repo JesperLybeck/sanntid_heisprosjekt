@@ -1,56 +1,14 @@
 package network
 
 import (
+	"Sanntid/config"
 	"Sanntid/elevator"
-	"Network-go/network/bcast"
+	"Sanntid/networkDriver/bcast"
 
-	"strconv"	
+
+	"strconv"
 	"time"
 )
-
-//-------------------------------Message formats--------------------
-type Status struct {
-	TransmitterID string
-	ReceiverID    string
-	Orders        [MElevators][NFloors][NButtons]bool
-	Map           map[string]int
-	StatusID      int
-}
-
-type Election struct {
-	TakeOverInProgress bool
-	LostNodeID         string
-	PrimaryID          string
-	BackupID           string
-}
-type Request struct {
-	ButtonEvent elevator.ButtonEvent
-	ID          string
-	TargetID    string
-	Orders      [NFloors][NButtons]bool
-	RequestID   int
-}
-
-type Order struct {
-	ButtonEvent         elevator.ButtonEvent
-	ResponisbleElevator string
-	OrderID             int
-}
-
-type SingleElevatorStatus struct {
-	ID             string
-	PrevFloor      int
-	MotorDirection elevator.MotorDirection
-	Orders         [NFloors][NButtons]bool
-	StatusID       int
-}
-
-type LightUpdate struct {
-	LightArray [NFloors][NButtons]bool
-	ID         string
-}
-
-
 
 func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestID int) {
 
@@ -80,14 +38,14 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 			floor := message.ButtonEvent.Floor
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
-			j := IpToIndexMap[message.ID]
-			if button == elevio.BT_Cab {
+			j := config.IpToIndexMap[message.ID]
+			if button == elevator.BT_Cab {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 					print("--------- Request acked ---------")
 					return
 				}
 			} else {
-				for i := 0; i < MElevators; i++ {
+				for i := 0; i < config.MElevators; i++ {
 					if (status.Orders[i][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 
 						print("--------- Request acked ---------")
@@ -126,7 +84,7 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			}
 		case <-messageTimer.C:
 			RequestID := message.OrderID
-			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: NodeStatusMap[ID].Orders, RequestID: RequestID}
+			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: config.NodeStatusMap[ID].Orders, RequestID: RequestID}
 			ResendChan <- Reassign
 			return
 

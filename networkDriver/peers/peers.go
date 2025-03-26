@@ -1,7 +1,7 @@
 package peers
 
 import (
-	"Network-go/network/conn"
+	"Sanntid/networkDriver/conn"
 	"fmt"
 	"net"
 	"sort"

@@ -1,18 +1,15 @@
-package fsm
+package network
 
 import (
-	"Network-go/network/peers"
+	"Sanntid/config"
 	"Sanntid/elevator"
-	"time"
-	//"golang.org/x/text/message"
 )
 
-
-//-------------------------------Message formats--------------------
+// -------------------------------Message formats--------------------
 type Status struct {
 	TransmitterID string
 	ReceiverID    string
-	Orders        [MElevators][NFloors][NButtons]bool
+	Orders        [config.MElevators][config.NFloors][config.NButtons]bool
 	Map           map[string]int
 	StatusID      int
 }
@@ -27,7 +24,7 @@ type Request struct {
 	ButtonEvent elevator.ButtonEvent
 	ID          string
 	TargetID    string
-	Orders      [NFloors][NButtons]bool
+	Orders      [config.NFloors][config.NButtons]bool
 	RequestID   int
 }
 
@@ -41,11 +38,11 @@ type SingleElevatorStatus struct {
 	ID             string
 	PrevFloor      int
 	MotorDirection elevator.MotorDirection
-	Orders         [NFloors][NButtons]bool
+	Orders         [config.NFloors][config.NButtons]bool
 	StatusID       int
 }
 
 type LightUpdate struct {
-	LightArray [NFloors][NButtons]bool
+	LightArray [config.NFloors][config.NButtons]bool
 	ID         string
 }

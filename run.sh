@@ -4,7 +4,7 @@
 
 # Set the variables
 nodeID="11"
-PORT=16001
+PORT=16000
 
 STARTASPRIM=true
 
@@ -29,7 +29,7 @@ start_sim_elevator_server() {
 start_process_supervisor() {
     echo "Starting processSupervisor..."
     gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
-    #nome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
+    #gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
 }
 
 # Start the SimElevatorServer

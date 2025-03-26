@@ -1,9 +1,9 @@
 package main
 
 import (
-	"Network-go/bcast"
-	"Network-go/network/localip"
-	"Network-go/network/peers"
+	"Sanntid/networkDriver/bcast"
+	"Sanntid/networkDriver/localip"
+	"Sanntid/networkDriver/peers"
 	"Sanntid/elevator"
 	"Sanntid/fsm"
 	"Sanntid/pba"
