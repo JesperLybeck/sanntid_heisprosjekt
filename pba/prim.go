@@ -149,8 +149,11 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 
 						lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, fsm.LastMessagesMap)
 						if lastMessageNumber == a.RequestID {
+
 							continue
 						}
+						fmt.Print("LastMessageNumber-->", lastMessageNumber, "--RequestID-->", a.RequestID, "---")
+
 
 						order := fsm.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
 

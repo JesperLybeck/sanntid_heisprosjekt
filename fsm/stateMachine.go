@@ -346,11 +346,19 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
 			j := IpToIndexMap[message.ID]
+			if button == elevio.BT_Cab {
+				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
+					print("--------- Request acked ---------")
+					return
+				}
+			} else {
+				for i := 0; i < MElevators; i++ {
+					if (status.Orders[i][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 
-			if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
-
-				print("--------- Request acked ---------")
-				return
+						print("--------- Request acked ---------")
+						return
+					}
+				}
 			}
 
 		case <-messageTimer.C:
