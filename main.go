@@ -1,11 +1,13 @@
 package main
 
 import (
+	"Sanntid/config"
+	"Sanntid/elevator"
+
+	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
 	"Sanntid/networkDriver/localip"
 	"Sanntid/networkDriver/peers"
-	"Sanntid/elevator"
-	"Sanntid/fsm"
 	"Sanntid/pba"
 
 	"os"
@@ -14,7 +16,7 @@ import (
 
 // ------------------------------Utility functions--------------------------------
 
-func setHardwareEffects(E fsm.Elevator) {
+func setHardwareEffects(E elevator.Elevator) {
 	elevator.SetMotorDirection(E.Output.MotorDirection)
 	elevator.SetDoorOpenLamp(E.Output.Door)
 	elevator.SetFloorIndicator(E.Input.PrevFloor)
@@ -27,22 +29,21 @@ var startingAsPrimaryEnv string
 var startingAsPrimary bool
 var elevatorPortNumber string
 
-
 func main() {
-	var lastClearedButtons[]elevator.ButtonEvent
+	var lastClearedButtons []elevator.ButtonEvent
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
-	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
-	RequestToPrimTX := make(chan fsm.Request)
-	OrderFromPrimRX := make(chan fsm.Order)
-	OrderCompletedTX := make(chan fsm.Request)
-	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
+	nodeStatusTX := make(chan network.SingleElevatorStatus) //strictly having both should be unnecessary.
+	RequestToPrimTX := make(chan network.Request)
+	OrderFromPrimRX := make(chan network.Order)
+	OrderCompletedTX := make(chan network.Request)
+	LightUpdateFromPrimRX := make(chan network.LightUpdate)
 	peersRX := make(chan peers.PeerUpdate)
 
 	buttonPressCh := make(chan elevator.ButtonEvent)
 	floorReachedCh := make(chan int)
 
-	primaryMerge := make(chan fsm.Election)
+	primaryMerge := make(chan network.Election)
 
 	//doorTimeoutCh := make(chan bool)
 
@@ -70,7 +71,7 @@ func main() {
 	}
 
 	if startingAsPrimary {
-		fsm.PrimaryID = ID
+		pba.PrimaryID = ID
 	}
 
 	elevatorPortNumber = os.Getenv("PORT") // Read the environment variable
@@ -78,13 +79,13 @@ func main() {
 		elevatorPortNumber = "15657" // Default value if the environment variable is not set
 	}
 	//-----------------------------STATE MACHINE VARIABLES-----------------------------
-	var elevator fsm.Elevator
-	var prevLightMatrix [fsm.NFloors][fsm.NButtons]bool
+	var E elevator.Elevator
+	var prevLightMatrix [config.NFloors][config.NButtons]bool
 	var NumRequests int = 1
 	var lastOrderID int = 0
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
-	elevator.Init("localhost:"+elevatorPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
+	elevator.Init("localhost:"+elevatorPortNumber, config.NFloors) //when starting, the elevator goes up until it reaches a floor.
 
 	for {
 		elevator.SetMotorDirection(elevator.MD_Up)
@@ -92,7 +93,7 @@ func main() {
 			elevator.SetMotorDirection(elevator.MD_Stop)
 			break
 		}
-		time.Sleep(fsm.OrderTimeout * time.Millisecond) // Add small delay between polls
+		time.Sleep(config.OrderTimeout * time.Millisecond) // Add small delay between polls
 	}
 	for j := 0; j < 4; j++ {
 		elevator.SetButtonLamp(elevator.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
@@ -100,18 +101,18 @@ func main() {
 		elevator.SetButtonLamp(elevator.BT_Cab, j, false)
 	}
 	//elevator state machine variables are initialized.
-	elevator.State = fsm.Idle                                        //after initializing the elevator, it goes to the idle state.
-	elevator.Input.LocalRequests = [fsm.NFloors][fsm.NButtons]bool{} // not strictly necessary, but...
-	elevator.Output.LocalOrders = [fsm.NFloors][fsm.NButtons]bool{}
-	elevator.Input.PrevFloor = elevator.GetFloor()
-	elevator.DoorTimer = time.NewTimer(3 * time.Second)
-	elevator.Output.Door = true
-	elevator.OrderCompleteTimer = time.NewTimer(fsm.OrderTimeout * time.Second)
-	elevator.ObstructionTimer = time.NewTimer(7 * time.Second)
+	E.State = elevator.Idle                                         //after initializing the elevator, it goes to the idle state.
+	E.Input.LocalRequests = [config.NFloors][config.NButtons]bool{} // not strictly necessary, but...
+	E.Output.LocalOrders = [config.NFloors][config.NButtons]bool{}
+	E.Input.PrevFloor = elevator.GetFloor()
+	E.DoorTimer = time.NewTimer(3 * time.Second)
+	E.Output.Door = true
+	E.OrderCompleteTimer = time.NewTimer(config.OrderTimeout * time.Second)
+	E.ObstructionTimer = time.NewTimer(7 * time.Second)
 
-	elevator.ObstructionTimer.Stop()
+	E.ObstructionTimer.Stop()
 
-	elevator.OrderCompleteTimer.Stop()
+	E.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.RoleElection(ID, primaryMerge)
 	go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
@@ -139,18 +140,19 @@ func main() {
 
 		case p := <-peersRX: //vi klarer oss vell uten denne, med casen over?
 			// To register if alone on network and enter offline mode
-			if len(p.Peers) == 0 {
-				fsm.AloneOnNetwork = true
-			} else {
-				fsm.AloneOnNetwork = false
-			}
+			pba.AloneOnNetwork = len(p.Peers) == 0 /*
+				if len(p.Peers) == 0 {
+					pba.AloneOnNetwork = true
+				} else {
+					pba.AloneOnNetwork = false
+				}*/
 		case lights := <-LightUpdateFromPrimRX:
 
 			//when light update is received from primary, the node updates its own lights with the newest information.
-			if (fsm.LightsDifferent(prevLightMatrix, lights.LightArray)) && lights.ID == ID {
+			if (elevator.LightsDifferent(prevLightMatrix, lights.LightArray)) && lights.ID == ID {
 
-				for i := range fsm.NButtons {
-					for j := range fsm.NFloors {
+				for i := range config.NButtons {
+					for j := range config.NFloors {
 						elevator.SetButtonLamp(elevator.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
 
 					}
@@ -161,24 +163,24 @@ func main() {
 			}
 
 		case btnEvent := <-buttonPressCh: //case for å håndtere knappe trykk. Sender ordre til prim.			// Hvis heisen er i etasje n og får knappetrykk i n trenger man ikke å sende ordre til primary
-			elevator.Input.LocalRequests[btnEvent.Floor][btnEvent.Button] = true
-			requestToPrimary := fsm.Request{
+			E.Input.LocalRequests[btnEvent.Floor][btnEvent.Button] = true
+			requestToPrimary := network.Request{
 				ButtonEvent: btnEvent,
 				ID:          ID,
-				TargetID:    fsm.PrimaryID,
-				Orders:      elevator.Input.LocalRequests,
+				TargetID:    pba.PrimaryID,
+				Orders:      E.Input.LocalRequests,
 				RequestID:   NumRequests,
 			}
 			// ISSUE! when the order is delegated to a different node, we cant ack on
 
-			go fsm.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests)
+			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests)
 			NumRequests++
 
-			if fsm.AloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
-				offlineOrder := fsm.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
-				elevator = fsm.HandleNewOrder(offlineOrder, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
+			if pba.AloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
+				offlineOrder := network.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
+				E = elevator.HandleNewOrder(offlineOrder.ButtonEvent, E) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevator.SetButtonLamp(elevator.BT_Cab, btnEvent.Floor, true)
-				setHardwareEffects(elevator)
+				setHardwareEffects(E)
 				print("Offline order received")
 			}
 
@@ -197,54 +199,54 @@ func main() {
 			//problem om heisen allerede er i etasjen ordren er i.
 			//Da vil primary ikke få ack, fordi handle new order legger ikke til ordren i localOrders.
 			//programmet terminerer ikke.
-			elevator = fsm.HandleNewOrder(order, elevator)
+			E = elevator.HandleNewOrder(order.ButtonEvent, E)
 			lastOrderID = order.OrderID //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 
-			setHardwareEffects(elevator)
+			setHardwareEffects(E)
 
 		case a := <-floorReachedCh:
 
-			temp := elevator
-			elevator = fsm.HandleFloorReached(a, elevator)
-			lastClearedButtons = LastClearedButtons(temp,elevator)
+			temp := E
+			E = elevator.HandleFloorReached(a, E)
+			lastClearedButtons = LastClearedButtons(temp, E)
 
-			setHardwareEffects(elevator)
+			setHardwareEffects(E)
 
-			if fsm.AloneOnNetwork {
+			if pba.AloneOnNetwork {
 				elevator.SetButtonLamp(elevator.BT_Cab, a, false)
 			}
 
-		case <-elevator.DoorTimer.C:
+		case <-E.DoorTimer.C:
 
-			elevator.DoorObstructed = elevator.GetObstruction()
+			E.DoorObstructed = elevator.GetObstruction()
 
-			elevator = fsm.HandleDoorTimeout(elevator)
+			E = elevator.HandleDoorTimeout(E)
 
-			setHardwareEffects(elevator)
+			setHardwareEffects(E)
 
-			elevator.OrderCompleteTimer.Stop()
+			E.OrderCompleteTimer.Stop()
 			print("sending order complete message")
 
 			for i := range lastClearedButtons {
-				orderMessage := fsm.Request{ButtonEvent: lastClearedButtons[i],
-				ID:        ID,
-				TargetID:  fsm.PrimaryID,
-				Orders:    elevator.Output.LocalOrders,
-				RequestID: NumRequests}
+				orderMessage := network.Request{ButtonEvent: lastClearedButtons[i],
+					ID:        ID,
+					TargetID:  pba.PrimaryID,
+					Orders:    E.Output.LocalOrders,
+					RequestID: NumRequests}
 
-				go fsm.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests)
+				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests)
 				NumRequests++
 			}
 
-		case <-elevator.OrderCompleteTimer.C:
+		case <-E.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
 			panic("Node failed to complete order, possible engine failure or faulty sensor")
-		case <-elevator.ObstructionTimer.C:
+		case <-E.ObstructionTimer.C:
 			print("Node failed to complete order. throwing panic")
 			panic("Node failed to complete order, door obstruction")
 		case <-statusTicker.C:
 
-			nodeStatusTX <- fsm.SingleElevatorStatus{ID: ID, PrevFloor: elevator.Input.PrevFloor, MotorDirection: elevator.Output.MotorDirection, Orders: elevator.Output.LocalOrders}
+			nodeStatusTX <- network.SingleElevatorStatus{ID: ID, PrevFloor: E.Input.PrevFloor, MotorDirection: E.Output.MotorDirection, Orders: E.Output.LocalOrders}
 
 		}
 
@@ -252,12 +254,12 @@ func main() {
 
 }
 
-func LastClearedButtons(e fsm.Elevator, b fsm.Elevator) []elevator.ButtonEvent {
+func LastClearedButtons(e elevator.Elevator, b elevator.Elevator) []elevator.ButtonEvent {
 	lcb := []elevator.ButtonEvent{}
 	order1 := e.Output.LocalOrders
 	order2 := b.Output.LocalOrders
-	for i := 0; i < fsm.NFloors; i++ {
-		for j := 0; j < fsm.NButtons; j++ {
+	for i := 0; i < config.NFloors; i++ {
+		for j := 0; j < config.NButtons; j++ {
 			if order1[i][j] != order2[i][j] {
 				lcb = append(lcb, elevator.ButtonEvent{Floor: i, Button: elevator.ButtonType(j)})
 			}

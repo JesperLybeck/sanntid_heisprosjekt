@@ -1,8 +1,8 @@
 package elevator
 
 import (
-	"time"
 	"Sanntid/config"
+	"time"
 )
 
 type ElevatorState int

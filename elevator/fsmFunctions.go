@@ -2,6 +2,7 @@ package elevator
 
 import (
 	"Sanntid/config"
+	//"Sanntid/network"
 	"fmt"
 	"time"
 )
@@ -144,20 +145,20 @@ func chooseDirection(E Elevator) DirectionStatePair {
 
 }
 
-func HandleNewOrder(order Order, E Elevator) Elevator {
+func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 	wasIdleAtNewOrder := E.State == Idle
 	nextElevator := E
-	nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = true //legger inn den nye ordren.
+	nextElevator.Output.LocalOrders[order.Floor][order.Button] = true //legger inn den nye ordren.
 
 	//først håndterer vi tilfellet der ordren er i etasjen vi er i.
 
 	switch nextElevator.State {
 
 	case DoorOpen:
-		if shouldClearImmediately(nextElevator, order.ButtonEvent) {
+		if shouldClearImmediately(nextElevator, order) {
 			//uten disse, vil heisen stå i 6 sekunder.
-			nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][order.ButtonEvent.Button] = false
-			nextElevator.Output.LocalOrders[order.ButtonEvent.Floor][BT_Cab] = false
+			nextElevator.Output.LocalOrders[order.Floor][order.Button] = false
+			nextElevator.Output.LocalOrders[order.Floor][BT_Cab] = false
 			nextElevator.Output.MotorDirection = MD_Stop
 			nextElevator.State = DoorOpen
 			nextElevator.Output.Door = true

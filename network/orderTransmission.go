@@ -5,7 +5,6 @@ import (
 	"Sanntid/elevator"
 	"Sanntid/networkDriver/bcast"
 
-
 	"strconv"
 	"time"
 )
@@ -63,7 +62,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 	}
 }
 
-func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int, ResendChan chan<- Request) {
+func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus, message Order, ID string, OrderID int, ResendChan chan<- Request, nodeStatusMap map[string]SingleElevatorStatus) {
 	messageTimer := time.NewTimer(5 * time.Second)
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
 
@@ -84,7 +83,7 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			}
 		case <-messageTimer.C:
 			RequestID := message.OrderID
-			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: config.NodeStatusMap[ID].Orders, RequestID: RequestID}
+			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: nodeStatusMap[ID].Orders, RequestID: RequestID}
 			ResendChan <- Reassign
 			return
 
