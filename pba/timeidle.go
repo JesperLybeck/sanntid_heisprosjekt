@@ -1,11 +1,16 @@
 package pba
 
 import (
-	"Sanntid/elevio"
+	"Sanntid/elevator"
 	"Sanntid/fsm"
 	"fmt"
 	"math"
 )
+
+type CostTuple struct {
+	Cost int
+	ID   string
+}
 
 // min function to find the minimum value in an array
 func argmin(arr []fsm.CostTuple) string {
@@ -42,7 +47,7 @@ func AssignOrder(request fsm.Order) string {
 			default:
 				fmt.Print("no peer update: ", fsm.LatestPeerList)
 				costs := make([]fsm.CostTuple, len(fsm.LatestPeerList.Peers)) // costs for each elevator
-				if request.ButtonEvent.Button == elevio.BT_Cab {
+				if request.ButtonEvent.Button == elevator.BT_Cab {
 					return request.ResponisbleElevator
 				}
 

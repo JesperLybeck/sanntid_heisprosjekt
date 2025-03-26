@@ -1,10 +1,10 @@
 package main
 
 import (
-	"Network-go/network/bcast"
+	"Network-go/bcast"
 	"Network-go/network/localip"
 	"Network-go/network/peers"
-	"Sanntid/elevio"
+	"Sanntid/elevator"
 	"Sanntid/fsm"
 	"Sanntid/pba"
 
@@ -15,9 +15,9 @@ import (
 // ------------------------------Utility functions--------------------------------
 
 func setHardwareEffects(E fsm.Elevator) {
-	elevio.SetMotorDirection(E.Output.MotorDirection)
-	elevio.SetDoorOpenLamp(E.Output.Door)
-	elevio.SetFloorIndicator(E.Input.PrevFloor)
+	elevator.SetMotorDirection(E.Output.MotorDirection)
+	elevator.SetDoorOpenLamp(E.Output.Door)
+	elevator.SetFloorIndicator(E.Input.PrevFloor)
 
 }
 
@@ -25,10 +25,11 @@ func setHardwareEffects(E fsm.Elevator) {
 var ID string
 var startingAsPrimaryEnv string
 var startingAsPrimary bool
-var elevioPortNumber string
+var elevatorPortNumber string
+
 
 func main() {
-	var lastClearedButtons []elevio.ButtonEvent
+	var lastClearedButtons[]elevator.ButtonEvent
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
 	nodeStatusTX := make(chan fsm.SingleElevatorStatus) //strictly having both should be unnecessary.
@@ -38,8 +39,9 @@ func main() {
 	LightUpdateFromPrimRX := make(chan fsm.LightUpdate)
 	peersRX := make(chan peers.PeerUpdate)
 
-	buttonPressCh := make(chan elevio.ButtonEvent)
+	buttonPressCh := make(chan elevator.ButtonEvent)
 	floorReachedCh := make(chan int)
+
 	primaryMerge := make(chan fsm.Election)
 
 	//doorTimeoutCh := make(chan bool)
@@ -71,9 +73,9 @@ func main() {
 		fsm.PrimaryID = ID
 	}
 
-	elevioPortNumber = os.Getenv("PORT") // Read the environment variable
-	if elevioPortNumber == "" {
-		elevioPortNumber = "15657" // Default value if the environment variable is not set
+	elevatorPortNumber = os.Getenv("PORT") // Read the environment variable
+	if elevatorPortNumber == "" {
+		elevatorPortNumber = "15657" // Default value if the environment variable is not set
 	}
 	//-----------------------------STATE MACHINE VARIABLES-----------------------------
 	var elevator fsm.Elevator
@@ -82,26 +84,26 @@ func main() {
 	var lastOrderID int = 0
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
-	elevio.Init("localhost:"+elevioPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
+	elevator.Init("localhost:"+elevatorPortNumber, fsm.NFloors) //when starting, the elevator goes up until it reaches a floor.
 
 	for {
-		elevio.SetMotorDirection(elevio.MD_Up)
-		if elevio.GetFloor() != -1 {
-			elevio.SetMotorDirection(elevio.MD_Stop)
+		elevator.SetMotorDirection(elevator.MD_Up)
+		if elevator.GetFloor() != -1 {
+			elevator.SetMotorDirection(elevator.MD_Stop)
 			break
 		}
 		time.Sleep(fsm.OrderTimeout * time.Millisecond) // Add small delay between polls
 	}
 	for j := 0; j < 4; j++ {
-		elevio.SetButtonLamp(elevio.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
-		elevio.SetButtonLamp(elevio.BT_HallDown, j, false)
-		elevio.SetButtonLamp(elevio.BT_Cab, j, false)
+		elevator.SetButtonLamp(elevator.BT_HallUp, j, false) //skrur av alle lys ved initsialisering. Nødvendig???
+		elevator.SetButtonLamp(elevator.BT_HallDown, j, false)
+		elevator.SetButtonLamp(elevator.BT_Cab, j, false)
 	}
 	//elevator state machine variables are initialized.
 	elevator.State = fsm.Idle                                        //after initializing the elevator, it goes to the idle state.
 	elevator.Input.LocalRequests = [fsm.NFloors][fsm.NButtons]bool{} // not strictly necessary, but...
 	elevator.Output.LocalOrders = [fsm.NFloors][fsm.NButtons]bool{}
-	elevator.Input.PrevFloor = elevio.GetFloor()
+	elevator.Input.PrevFloor = elevator.GetFloor()
 	elevator.DoorTimer = time.NewTimer(3 * time.Second)
 	elevator.Output.Door = true
 	elevator.OrderCompleteTimer = time.NewTimer(fsm.OrderTimeout * time.Second)
@@ -115,8 +117,9 @@ func main() {
 	go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
 	go pba.Backup(ID, primaryMerge)
 
-	go elevio.PollButtons(buttonPressCh) //starting go routines for polling HW
-	go elevio.PollFloorSensor(floorReachedCh)
+	go elevator.PollButtons(buttonPressCh) //starting go routines for polling HW
+	go elevator.PollFloorSensor(floorReachedCh)
+
 	go bcast.Transmitter(13057, RequestToPrimTX) //starting go routines for network communication with other primary.
 	go bcast.Receiver(13056, OrderFromPrimRX)
 	go bcast.Transmitter(13058, OrderCompletedTX)
@@ -148,7 +151,7 @@ func main() {
 
 				for i := range fsm.NButtons {
 					for j := range fsm.NFloors {
-						elevio.SetButtonLamp(elevio.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
+						elevator.SetButtonLamp(elevator.ButtonType(i), j, lights.LightArray[j][i]) // vi kan vurdere om denne faktisk kan pakkes inn i en funksjon da vi gjør dette flere steder  koden.
 
 					}
 
@@ -171,10 +174,10 @@ func main() {
 			go fsm.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests)
 			NumRequests++
 
-			if fsm.AloneOnNetwork && btnEvent.Button == elevio.BT_Cab {
+			if fsm.AloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
 				offlineOrder := fsm.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
 				elevator = fsm.HandleNewOrder(offlineOrder, elevator) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
-				elevio.SetButtonLamp(elevio.BT_Cab, btnEvent.Floor, true)
+				elevator.SetButtonLamp(elevator.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(elevator)
 				print("Offline order received")
 			}
@@ -203,17 +206,17 @@ func main() {
 
 			temp := elevator
 			elevator = fsm.HandleFloorReached(a, elevator)
-			lastClearedButtons = LastClearedButtons(temp, elevator)
+			lastClearedButtons = LastClearedButtons(temp,elevator)
 
 			setHardwareEffects(elevator)
 
 			if fsm.AloneOnNetwork {
-				elevio.SetButtonLamp(elevio.BT_Cab, a, false)
+				elevator.SetButtonLamp(elevator.BT_Cab, a, false)
 			}
 
 		case <-elevator.DoorTimer.C:
 
-			elevator.DoorObstructed = elevio.GetObstruction()
+			elevator.DoorObstructed = elevator.GetObstruction()
 
 			elevator = fsm.HandleDoorTimeout(elevator)
 
@@ -224,10 +227,10 @@ func main() {
 
 			for i := range lastClearedButtons {
 				orderMessage := fsm.Request{ButtonEvent: lastClearedButtons[i],
-					ID:        ID,
-					TargetID:  fsm.PrimaryID,
-					Orders:    elevator.Output.LocalOrders,
-					RequestID: NumRequests}
+				ID:        ID,
+				TargetID:  fsm.PrimaryID,
+				Orders:    elevator.Output.LocalOrders,
+				RequestID: NumRequests}
 
 				go fsm.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests)
 				NumRequests++
@@ -249,14 +252,14 @@ func main() {
 
 }
 
-func LastClearedButtons(e fsm.Elevator, b fsm.Elevator) []elevio.ButtonEvent {
-	lcb := []elevio.ButtonEvent{}
+func LastClearedButtons(e fsm.Elevator, b fsm.Elevator) []elevator.ButtonEvent {
+	lcb := []elevator.ButtonEvent{}
 	order1 := e.Output.LocalOrders
 	order2 := b.Output.LocalOrders
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons; j++ {
 			if order1[i][j] != order2[i][j] {
-				lcb = append(lcb, elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)})
+				lcb = append(lcb, elevator.ButtonEvent{Floor: i, Button: elevator.ButtonType(j)})
 			}
 		}
 	}

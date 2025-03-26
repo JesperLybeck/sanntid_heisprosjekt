@@ -3,7 +3,7 @@ package pba
 import (
 	"Network-go/network/bcast"
 	"Network-go/network/peers"
-	"Sanntid/elevio"
+	"Sanntid/elevator"
 	"Sanntid/fsm"
 	"fmt"
 	"time"
@@ -81,9 +81,9 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 								//Hvis vi finner at det er lagret cab calls for denne heisen som ikke er gjort her i remote, så trigger vi en ny ordre .
 								for i := 0; i < fsm.NFloors; i++ {
 
-									if fsm.StoredOrders[index][i][elevio.BT_Cab] {
+									if fsm.StoredOrders[index][i][elevator.BT_Cab] {
 
-										newOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.BT_Cab},
+										newOrder := fsm.Order{ButtonEvent: elevator.ButtonEvent{Floor: i, Button: elevator.BT_Cab},
 											ResponisbleElevator: p.New,
 											OrderID:             OrderNumber,
 										}
@@ -120,7 +120,7 @@ func Primary(ID string, primaryElection <-chan fsm.Election) {
 					case <-ticker.C:
 						//sending status to backup
 
-						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Version: fsm.Version, Map: fsm.IpToIndexMap}
+						statusTX <- fsm.Status{TransmitterID: ID, ReceiverID: fsm.BackupID, Orders: fsm.StoredOrders, Map: fsm.IpToIndexMap}
 						//periodic light update to nodes.
 
 						//when it is time to send light update:
@@ -307,7 +307,7 @@ func distributeOrdersFromLostNode(lostNodeID string, StoredOrders [fsm.MElevator
 	for i := 0; i < fsm.NFloors; i++ {
 		for j := 0; j < fsm.NButtons-1; j++ {
 			if lostOrders[i][j] {
-				lostOrder := fsm.Order{ButtonEvent: elevio.ButtonEvent{Floor: i, Button: elevio.ButtonType(j)}, ResponisbleElevator: "", OrderID: OrderNumber}
+				lostOrder := fsm.Order{ButtonEvent: elevator.ButtonEvent{Floor: i, Button: elevator.ButtonType(j)}, ResponisbleElevator: "", OrderID: OrderNumber}
 				responsibleElevator := AssignOrder(lostOrder)
 				lostOrder.ResponisbleElevator = responsibleElevator
 

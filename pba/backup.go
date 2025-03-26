@@ -30,7 +30,7 @@ func Backup(ID string, primaryElection chan<- fsm.Election) {
 					fsm.LatestPeerList = removeFromActivePeers(fsm.PrimaryID, fsm.LatestPeerList)
 					fmt.Print("LatestPeerlist from prim timeout", fsm.LatestPeerList)
 					fmt.Println("New peerlist", fsm.LatestPeerList)
-					fsm.Version++
+					
 					fsm.PreviousPrimaryID = fsm.PrimaryID
 					fsm.PrimaryID = ID
 					fsm.BackupID = ""
