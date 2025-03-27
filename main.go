@@ -3,7 +3,6 @@ package main
 import (
 	"Sanntid/config"
 	"Sanntid/elevator"
-	"fmt"
 
 	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
@@ -117,19 +116,23 @@ func main() {
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.RoleElection(ID, primaryMerge)
 
-	initialPrimaryState := network.Status{
-		TransmitterID: ID,
-		Orders:        [config.MElevators][config.NFloors][config.NButtons]bool{},
-		StatusID:      0,
+	initialPrimaryState := network.Takeover{
+		StoredOrders:       [config.MElevators][config.NFloors][config.NButtons]bool{},
+		PreviousPrimaryID:  "",
+		Peerlist:           peers.PeerUpdate{},
+		NodeMap:            map[string]network.SingleElevatorStatus{},
+		TakeOverInProgress: false,
 	}
 	//go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
-	fmt.Print("Starting as primary: ", startingAsPrimary)
+	primaryRoutineDone := make(chan bool)
+	backupRoutineDone := make(chan network.Takeover)
+
 	if startingAsPrimary {
-		go pba.Primary(ID, primaryMerge, initialPrimaryState)
-		print("Starting as primary")
+		go pba.Primary(ID, primaryMerge, initialPrimaryState, primaryRoutineDone)
+
 	} else {
-		print("Starting as backup")
-		go pba.Backup(ID, primaryMerge)
+
+		go pba.Backup(ID, primaryMerge, backupRoutineDone)
 
 	}
 
@@ -149,7 +152,14 @@ func main() {
 	for {
 
 		select {
-
+		case <-primaryRoutineDone:
+			print("demoting to backup")
+			go pba.Backup(ID, primaryMerge, backupRoutineDone)
+			//hvis noden er ferdig som prim (har blitt nedgradert)
+		case <-backupRoutineDone:
+			print("promoting to primary")
+			//hvis noden er ferdig som backup (har blitt oppgradert)
+			go pba.Primary(ID, primaryMerge, initialPrimaryState, primaryRoutineDone)
 		case p := <-peersRX: //vi klarer oss vell uten denne, med casen over?
 			// To register if alone on network and enter offline mode
 			aloneOnNetwork = len(p.Peers) == 0 /*
@@ -192,7 +202,7 @@ func main() {
 				E = elevator.HandleNewOrder(offlineOrder.ButtonEvent, E) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevator.SetButtonLamp(elevator.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(E)
-				print("Offline order received")
+
 			}
 
 			//vi diskuterte om vi trengte å ha egen case for cab. Vi kom frem til at det ikke trengs fordi:

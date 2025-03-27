@@ -6,22 +6,18 @@ import (
 	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
 	"Sanntid/networkDriver/peers"
-	"fmt"
 	"time"
 )
 
 var OrderNumber int = 1
 
-func Primary(id string, primaryElection <-chan network.Election, status network.Status) {
-	storedOrders := status.Orders
-	fmt.Print("stored orders in status,", storedOrders)
+func Primary(id string, primaryElection <-chan network.Election, initialState network.Takeover, done chan<- bool) {
+	storedOrders := initialState.StoredOrders
 
-	primaryID := id
-	backupID := ""
 	nodeStatusMap := make(map[string]network.SingleElevatorStatus)
-	previousprimaryID := status.PreviousPrimaryID
-	takeOverInProgress := status.TakeOverInProgress
-	latestPeerList := peers.PeerUpdate{}
+	previousprimaryID := initialState.PreviousPrimaryID
+	takeOverInProgress := initialState.TakeOverInProgress
+	latestPeerList := initialState.Peerlist
 
 	//TODO, PASS CHANNELS I GOROUTINES
 
@@ -49,43 +45,38 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 
 	var lastMessagesMap = make(map[string]int)
 
+	if takeOverInProgress {
+		//do stuff
+
+		lostOrders := make([]network.Order, 0)
+		storedOrders, lostOrders = distributeOrdersFromLostNode(previousprimaryID, storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
+		print("Lost orders: ", lostOrders)
+		for order := 0; order < len(lostOrders); order++ {
+			go network.SendOrder(orderTX, nodeStatusRX, lostOrders[order], id, OrderNumber, requestRX, nodeStatusMap)
+			OrderNumber++
+		}
+
+		takeOverInProgress = false
+	}
+
 	for {
-		print("I am prim")
 
 		select {
 		case nodeUpdate := <-nodeStatusRX:
 
-			nodeStatusMap = updateNodeMap(nodeUpdate.ID, nodeUpdate, nodeStatusMap)
+			nodeStatusMap = UpdateNodeMap(nodeUpdate.ID, nodeUpdate, nodeStatusMap)
 
-			if takeOverInProgress {
-				//do stuff
-				print("takeover in progress")
-				storedOrders = distributeOrdersFromLostNode(previousprimaryID, storedOrders, orderTX, nodeStatusRX, requestRX, config.IDToIndexMap, nodeStatusMap, latestPeerList)
-				print("distributing orders from takeover", previousprimaryID)
-				takeOverInProgress = false
-			}
 		case p := <-primaryElection:
 			if id != p.PrimaryID {
-				go Backup(id, primaryElection)
+				//go Backup(id, primaryElection,)
+				//nedgradere til backup
+				done <- true
 				return
 			}
 
-			primaryID = p.PrimaryID
-			backupID = p.BackupID
-
 		case p := <-peersRX:
-			print("new peer update")
 
-			fmt.Println("Peerupdate in prim, change of LatestPeerList")
 			latestPeerList = p
-
-			if backupID == "" && len(p.Peers) > 1 {
-				for i := 0; i < len(p.Peers); i++ {
-					if p.Peers[i] != id {
-						backupID = p.Peers[i]
-					}
-				}
-			}
 
 			if p.New != "" {
 				index, exists := getOrAssignIndex(p.New, config.IDToIndexMap)
@@ -102,8 +93,7 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 								ResponisbleElevator: p.New,
 								OrderID:             OrderNumber,
 							}
-							print("new order from restore cab calls")
-							print("----------searchmapindex:-------->", searchMap(index, config.IDToIndexMap), "<------")
+
 							go network.SendOrder(orderTX, nodeStatusRX, newOrder, searchMap(index, config.IDToIndexMap), OrderNumber, requestRX, nodeStatusMap)
 
 							OrderNumber++
@@ -113,22 +103,15 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 
 				}
 			}
-			fmt.Print("lost node", p.Lost)
+
 			for i := 0; i < len(p.Lost); i++ {
 				//alle som dør
-
-				storedOrders = distributeOrdersFromLostNode(p.Lost[i], storedOrders, orderTX, nodeStatusRX, requestRX, config.IDToIndexMap, nodeStatusMap, latestPeerList)
-
-				//hvis backup dør
-				if p.Lost[i] == backupID {
-
-					for j := 0; j < len(p.Peers); j++ {
-						if p.Peers[j] != primaryID {
-							backupID = p.Peers[j]
-						} else {
-							backupID = ""
-						}
-					}
+				lostOrders := make([]network.Order, 0)
+				storedOrders, lostOrders = distributeOrdersFromLostNode(p.Lost[i], storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
+				print("Lost orders: ", lostOrders)
+				for order := 0; order < len(lostOrders); order++ {
+					go network.SendOrder(orderTX, nodeStatusRX, lostOrders[order], id, OrderNumber, requestRX, nodeStatusMap)
+					OrderNumber++
 				}
 			}
 
@@ -139,10 +122,8 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 				TransmitterID:      id,
 				Orders:             storedOrders,
 				StatusID:           1,
-				PreviousPrimaryID:  primaryID,
 				AloneOnNetwork:     false,
 				TakeOverInProgress: false,
-				PeerList:           latestPeerList,
 			}
 			//periodic light update to nodes.
 
@@ -153,6 +134,7 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 
 			for i := 0; i < len(config.IDToIndexMap); i++ {
 				//compute the new lightmatrix given the stored orders.
+
 				lightUpdate := makeLightMatrix(searchMap(i, config.IDToIndexMap), storedOrders, config.IDToIndexMap)
 				//problem. denne oppdaterer kun hall light for 1 node av gangen, men denne oppdateringen må gå på alle.
 
@@ -175,12 +157,10 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 
 				continue
 			}
-			fmt.Print("LastMessageNumber-->", lastMessageNumber, "--RequestID-->", a.RequestID, "---")
-
 			order := network.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
 
 			responsibleElevator := AssignOrder(order, latestPeerList, nodeStatusMap)
-			print("responsible elevator", responsibleElevator)
+
 			order.ResponisbleElevator = responsibleElevator
 
 			responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator, config.IDToIndexMap)
@@ -193,13 +173,11 @@ func Primary(id string, primaryElection <-chan network.Election, status network.
 			//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
 			go network.SendOrder(orderTX, nodeStatusRX, newMessage, id, OrderNumber, requestRX, nodeStatusMap)
-			print("new order from request")
+
 			OrderNumber++
 			lastMessagesMap[a.ID] = a.RequestID
 
 		case a := <-RXFloorReached:
-
-			fmt.Println(a)
 
 			lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, lastMessagesMap)
 			if lastMessageNumber == a.RequestID {
@@ -289,7 +267,7 @@ func searchMap(index int, idIndexMap map[string]int) string {
 	return ""
 }
 
-func updateNodeMap(ID string, status network.SingleElevatorStatus, nodeMap map[string]network.SingleElevatorStatus) map[string]network.SingleElevatorStatus {
+func UpdateNodeMap(ID string, status network.SingleElevatorStatus, nodeMap map[string]network.SingleElevatorStatus) map[string]network.SingleElevatorStatus {
 	if _, exists := nodeMap[ID]; exists {
 		nodeMap[ID] = status
 	} else {
@@ -320,34 +298,34 @@ func makeLightMatrix(ID string, storedOrders [config.MElevators][config.NFloors]
 	return lightMatrix
 }
 
-func distributeOrdersFromLostNode(lostNodeID string, storedOrders [config.MElevators][config.NFloors][config.NButtons]bool, orderTX chan<- network.Order, ackChan <-chan network.SingleElevatorStatus, resendChan chan network.Request, idMap map[string]int, nodeMap map[string]network.SingleElevatorStatus, Peerlist peers.PeerUpdate) [config.MElevators][config.NFloors][config.NButtons]bool {
+func distributeOrdersFromLostNode(lostNodeID string, storedOrders [config.MElevators][config.NFloors][config.NButtons]bool, idMap map[string]int, nodeMap map[string]network.SingleElevatorStatus, Peerlist peers.PeerUpdate) ([config.MElevators][config.NFloors][config.NButtons]bool, []network.Order) {
 	distributedOrders := storedOrders
 	lostNodeIndex, _ := getOrAssignIndex(lostNodeID, idMap)
-	print("dist orders from lost node", lostNodeID)
+
+	reassignedOrders := make([]network.Order, 0)
+
 	lostOrders := storedOrders[lostNodeIndex]
 	for i := 0; i < config.NFloors; i++ {
 		for j := 0; j < config.NButtons-1; j++ {
 			if lostOrders[i][j] {
-				print("lost order found")
+
 				lostOrder := network.Order{ButtonEvent: elevator.ButtonEvent{Floor: i, Button: elevator.ButtonType(j)}, ResponisbleElevator: "", OrderID: OrderNumber}
-				fmt.Print("lost order", lostOrder, Peerlist, nodeMap)
+
 				responsibleElevator := AssignOrder(lostOrder, Peerlist, nodeMap)
-				print("responsible elevator", responsibleElevator)
+
 				lostOrder.ResponisbleElevator = responsibleElevator
 
 				distributedOrders[lostNodeIndex][i][j] = false
-				print("clearing order from dead node orders")
 
 				responsibleElevatorIndex, _ := getOrAssignIndex(responsibleElevator, idMap)
-				print("responsible elevator", responsibleElevatorIndex)
+
 				distributedOrders[responsibleElevatorIndex][i][j] = true
-				print("new order from lost node")
-				go network.SendOrder(orderTX, ackChan, lostOrder, responsibleElevator, OrderNumber, resendChan, nodeMap)
-				OrderNumber++
+				reassignedOrders = append(reassignedOrders, lostOrder)
 
 			}
+
 		}
 	}
-	return distributedOrders
+	return distributedOrders, reassignedOrders
 
 }

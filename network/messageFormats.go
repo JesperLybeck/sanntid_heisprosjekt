@@ -11,18 +11,21 @@ type Status struct {
 	TransmitterID      string
 	Orders             [config.MElevators][config.NFloors][config.NButtons]bool
 	StatusID           int
-	PreviousPrimaryID  string
 	AloneOnNetwork     bool
 	TakeOverInProgress bool
-	PeerList           peers.PeerUpdate
+}
+
+type Takeover struct {
+	StoredOrders       [config.MElevators][config.NFloors][config.NButtons]bool
+	PreviousPrimaryID  string
+	Peerlist           peers.PeerUpdate
+	NodeMap            map[string]SingleElevatorStatus
+	TakeOverInProgress bool
 }
 
 type Election struct {
-	TakeOverInProgress bool
-	LostNodeID         string
-	PrimaryID          string
-	BackupID           string
-	MergedOrders       [config.MElevators][config.NFloors][config.NButtons]bool
+	PrimaryID    string
+	MergedOrders [config.MElevators][config.NFloors][config.NButtons]bool
 }
 type Request struct {
 	ButtonEvent elevator.ButtonEvent

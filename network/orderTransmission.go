@@ -83,7 +83,7 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			}
 		case <-messageTimer.C:
 			RequestID := message.OrderID
-			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, RequestID: RequestID}
+			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: nodeStatusMap[ID].Orders, RequestID: RequestID}
 			ResendChan <- Reassign
 			return
 

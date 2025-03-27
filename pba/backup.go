@@ -2,7 +2,6 @@ package pba
 
 import (
 	"Sanntid/config"
-	"fmt"
 
 	"Sanntid/network"
 
@@ -12,52 +11,64 @@ import (
 
 var LatestStatusFromPrimary network.Status
 
-func Backup(ID string, primaryElection <-chan network.Election) {
+func Backup(ID string, primaryElection <-chan network.Election, done chan<- network.Takeover) {
 	// Set timeout duration
 	var primaryStatusRX = make(chan network.Status)
 	var peerUpdateRX = make(chan peers.PeerUpdate)
+	var nodeStatusUpdateRX = make(chan network.SingleElevatorStatus)
 	var latestStatusFromPrimary network.Status
 	var latestPeerList peers.PeerUpdate
 	var primaryID string
 	var previousPrimaryID string
 	var id string
+	var nodeMap map[string]network.SingleElevatorStatus
 	//var takeOverInProgress bool
 
 	go bcast.Receiver(13055, primaryStatusRX)
 	go peers.Receiver(12055, peerUpdateRX)
+	go bcast.Receiver(13056, nodeStatusUpdateRX)
 	//print("i am backup")
 
 	for {
-		print("i am backup!")
+
 		select {
 		case p := <-primaryElection:
+
 			if p.PrimaryID == ID {
-				go Primary(ID, primaryElection, latestStatusFromPrimary)
+				takeoverState := network.Takeover{
+					StoredOrders:       latestStatusFromPrimary.Orders,
+					PreviousPrimaryID:  previousPrimaryID,
+					Peerlist:           latestPeerList,
+					NodeMap:            nodeMap,
+					TakeOverInProgress: false,
+				}
+				//go Primary(ID, primaryElection, takeoverState, done)
+				done <- takeoverState
 				return
 			}
+		case n := <-nodeStatusUpdateRX:
+			nodeMap = UpdateNodeMap(n.ID, n, nodeMap)
 
 		case p := <-peerUpdateRX:
-			fmt.Print("peerupdate", p)
+
 			latestPeerList = p
 			if primInPeersLost(primaryID, p) {
-				print("Primary lost")
+
 				latestPeerList = removeFromActivePeers(primaryID, latestPeerList)
 				previousPrimaryID = primaryID
-				print("prev primaryID: ", previousPrimaryID)
+
 				primaryID = id
-				print("becoming primary")
-				//takeOverInProgress = true
-				takeoverState := network.Status{
-					TransmitterID:      id,
-					Orders:             latestStatusFromPrimary.Orders,
-					StatusID:           latestStatusFromPrimary.StatusID + 1,
-					AloneOnNetwork:     false,
+
+				takeoverState := network.Takeover{
+					StoredOrders:       latestStatusFromPrimary.Orders,
 					PreviousPrimaryID:  previousPrimaryID,
+					Peerlist:           latestPeerList,
+					NodeMap:            nodeMap,
 					TakeOverInProgress: true,
-					PeerList:           latestPeerList,
 				}
-				fmt.Print("sending takeoverstate,", takeoverState.Orders)
-				go Primary(ID, primaryElection, takeoverState)
+
+				//go Primary(ID, primaryElection, takeoverState)
+				done <- takeoverState
 				return
 
 			}

@@ -67,7 +67,7 @@ func shouldClearImmediately(E Elevator, btnEvent ButtonEvent) bool {
 	return ((E.Input.PrevFloor == btnEvent.Floor) && ((E.Output.MotorDirection == MD_Up && btnEvent.Button == BT_HallUp) ||
 		(E.Output.MotorDirection == MD_Down && btnEvent.Button == BT_HallDown) ||
 		(E.Output.MotorDirection == MD_Stop) ||
-		(btnEvent.Button == BT_Cab)) && !(E.State == DoorOpen))
+		(btnEvent.Button == BT_Cab)))
 
 }
 
@@ -164,6 +164,7 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator.ObstructionTimer.Reset(7 * time.Second)
+			nextElevator = ClearAtFloor(nextElevator)
 			print("Clearing order immediately, resetting obstruction timer")
 			//her returnerer vi tomt, så prim som venter på ack, får aldri denne.
 
