@@ -2,7 +2,6 @@ package pba
 
 import (
 	"Sanntid/config"
-	"time"
 
 	"Sanntid/network"
 
@@ -27,18 +26,19 @@ func Backup(ID string, backupSignal <-chan bool, primaryTakeover chan<- network.
 		go bcast.Receiver(13055, primaryStatusRX)
 		go peers.Receiver(12055, peerUpdateRX)
 		print("Backup")
-		time.Sleep(2 * time.Second)
+
 		primID := ""
-		
 
 	backupLoop:
 		for {
 			select {
 			case p := <-primaryStatusRX:
-				print("I am backup")
+
 				backupStoredOrders = p.Orders //denne bøurde vi gjøre lokal.
 				primID = p.TransmitterID
 				backupNodeStatusMap = p.NodeStatusMap
+				backupLatestPeerList = p.LatestPeerList
+
 			case p := <-peerUpdateRX:
 				backupLatestPeerList = p
 				if primInPeersLost(primID, p) {
@@ -46,10 +46,8 @@ func Backup(ID string, backupSignal <-chan bool, primaryTakeover chan<- network.
 					backupLatestPeerList = removeFromActivePeers(primID, backupLatestPeerList)
 					takeover := network.Takeover{TakeOverInProgress: true,
 						LostNodeID:     primID,
-						BackupID:       "",
-						PrimaryID:      ID,
 						StoredOrders:   backupStoredOrders,
-						NodeStatusMap: backupNodeStatusMap,
+						NodeStatusMap:  backupNodeStatusMap,
 						LatestPeerList: backupLatestPeerList}
 
 					primaryTakeover <- takeover

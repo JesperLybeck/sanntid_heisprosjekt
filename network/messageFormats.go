@@ -10,22 +10,28 @@ import (
 // -------------------------------Message formats--------------------
 type Status struct {
 	TransmitterID string
+	LatestPeerList peers.PeerUpdate
 	Orders        [config.MElevators][config.NFloors][config.NButtons]bool
 	NodeStatusMap      map[string]SingleElevatorStatus
 	StatusID      int
 }
 
+type SingleElevatorStatus struct {
+	ID             string
+	PrevFloor      int
+	MotorDirection elevator.MotorDirection
+	Orders         [config.NFloors][config.NButtons]bool
+	StatusID       int
+}
+
 type Election struct {
 	PrimaryID    string
-	BackupID     string
 	MergedOrders [config.MElevators][config.NFloors][config.NButtons]bool
 }
 
 type Takeover struct {
 	TakeOverInProgress bool
 	LostNodeID         string
-	PrimaryID          string
-	BackupID           string
 	NodeStatusMap      map[string]SingleElevatorStatus
 	StoredOrders       [config.MElevators][config.NFloors][config.NButtons]bool
 	LatestPeerList     peers.PeerUpdate
@@ -41,14 +47,6 @@ type Order struct {
 	ButtonEvent         elevator.ButtonEvent
 	ResponisbleElevator string
 	OrderID             int
-}
-
-type SingleElevatorStatus struct {
-	ID             string
-	PrevFloor      int
-	MotorDirection elevator.MotorDirection
-	Orders         [config.NFloors][config.NButtons]bool
-	StatusID       int
 }
 
 type LightUpdate struct {

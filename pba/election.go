@@ -15,7 +15,6 @@ func RoleElection(ID string, backupSignal chan<- bool, startRoleElection <-chan 
 		go bcast.Receiver(13055, primaryStatusRX)
 		LatestStatusFromPrimary := network.Status{}
 		primID := ""
-		backupID := ""
 		var storedOrders [config.MElevators][config.NFloors][config.NButtons]bool
 		print("Started RoleElection")
 
@@ -36,16 +35,14 @@ func RoleElection(ID string, backupSignal chan<- bool, startRoleElection <-chan 
 						println("Min ID større")
 						storedOrders = mergeOrders(LatestStatusFromPrimary.Orders, p.Orders) //take over manager i stedet håndterer denne
 						primID = ID
-						backupID = p.TransmitterID
 					} else if intID < intTransmitterID {
 						println("Min ID mindre")
 						primID = p.TransmitterID
-						backupID = ID
 					}
 
-					electionResult := network.Election{PrimaryID: primID, BackupID: backupID, MergedOrders: storedOrders}
+					electionResult := network.Election{PrimaryID: primID, MergedOrders: storedOrders}
 					primaryElection <- electionResult
-					if backupID == ID {
+					if primID != ID {
 						break electionLoop
 					}
 				}

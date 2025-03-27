@@ -17,6 +17,8 @@ import (
 // ------------------------------Utility functions--------------------------------
 
 func setHardwareEffects(E elevator.Elevator) {
+	print("Setting hardware effects")
+	print("------",E.Output.Door,"-------")
 	elevator.SetMotorDirection(E.Output.MotorDirection)
 	elevator.SetDoorOpenLamp(E.Output.Door)
 	elevator.SetFloorIndicator(E.Input.PrevFloor)
@@ -30,7 +32,6 @@ var startingAsPrimary bool
 var elevatorPortNumber string
 
 func main() {
-	var lastClearedButtons []elevator.ButtonEvent
 	var AloneOnNetwork bool
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
@@ -84,6 +85,7 @@ func main() {
 	var prevLightMatrix [config.NFloors][config.NButtons]bool
 	var NumRequests int = 1
 	var lastOrderID int = 0
+	var lastClearedButtons []elevator.ButtonEvent
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevator.Init("localhost:"+elevatorPortNumber, config.NFloors) //when starting, the elevator goes up until it reaches a floor.
@@ -121,7 +123,7 @@ func main() {
 
 	if startingAsPrimary {
 		time.Sleep(500 * time.Millisecond)
-		primaryTakeover <- network.Takeover{TakeOverInProgress: false}
+		primaryTakeover <- network.Takeover{TakeOverInProgress: false, NodeStatusMap: make(map[string]network.SingleElevatorStatus)}
 	} else {
 		activateBackup <- true
 	}
@@ -211,10 +213,7 @@ func main() {
 			setHardwareEffects(E)
 
 		case a := <-floorReachedCh:
-
-			temp := E
 			E = elevator.HandleFloorReached(a, E)
-			lastClearedButtons = LastClearedButtons(temp, E)
 
 			setHardwareEffects(E)
 
@@ -233,14 +232,16 @@ func main() {
 			E.OrderCompleteTimer.Stop()
 			print("sending order complete message")
 
-			for i := range lastClearedButtons {
-				orderMessage := network.Request{ButtonEvent: lastClearedButtons[i],
+			for i := range E.Input.LastClearedButtons {
+				orderMessage := network.Request{ButtonEvent: E.Input.LastClearedButtons[i],
 					ID:        ID,
 					Orders:    E.Output.LocalOrders,
 					RequestID: NumRequests}
 
 				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests)
 				NumRequests++
+				E.Input.LastClearedButtons = RemoveClearedOrder(lastClearedButtons, E.Input.LastClearedButtons[i])
+
 			}
 
 		case <-E.OrderCompleteTimer.C:
@@ -258,17 +259,12 @@ func main() {
 	}
 
 }
-
-func LastClearedButtons(e elevator.Elevator, b elevator.Elevator) []elevator.ButtonEvent {
-	lcb := []elevator.ButtonEvent{}
-	order1 := e.Output.LocalOrders
-	order2 := b.Output.LocalOrders
-	for i := 0; i < config.NFloors; i++ {
-		for j := 0; j < config.NButtons; j++ {
-			if order1[i][j] != order2[i][j] {
-				lcb = append(lcb, elevator.ButtonEvent{Floor: i, Button: elevator.ButtonType(j)})
-			}
+func RemoveClearedOrder(clearedOrders []elevator.ButtonEvent, event elevator.ButtonEvent) []elevator.ButtonEvent {
+	var remainingOrders []elevator.ButtonEvent
+	for i := 0; i < len(clearedOrders); i++ {
+		if clearedOrders[i] != event {
+			remainingOrders = append(remainingOrders, clearedOrders[i])
 		}
 	}
-	return lcb
+	return remainingOrders
 }

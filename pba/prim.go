@@ -51,7 +51,7 @@ func Primary(ID string, backupSignal chan<- bool, startRoleElection chan<- bool,
 
 		print("Primary Initialized")
 
-		primaryLoop:
+	primaryLoop:
 		for {
 
 			if takeover.TakeOverInProgress {
@@ -64,7 +64,7 @@ func Primary(ID string, backupSignal chan<- bool, startRoleElection chan<- bool,
 			select {
 			case p := <-primaryElection:
 
-				if p.BackupID == ID {
+				if p.PrimaryID != ID {
 					print("---------------------JEG TAPTE VALGET--------------------")
 					backupSignal <- true
 					break primaryLoop
@@ -74,7 +74,7 @@ func Primary(ID string, backupSignal chan<- bool, startRoleElection chan<- bool,
 
 			case nodeUpdate := <-nodeStatusRX:
 
-				updateNodeMap(nodeUpdate.ID, nodeUpdate, NodeStatusMap)
+				NodeStatusMap = updateNodeMap(nodeUpdate, NodeStatusMap)
 			case p := <-peersRX:
 				print("new peer update")
 				fmt.Println("Peerupdate in prim, change of LatestPeerList")
@@ -102,17 +102,17 @@ func Primary(ID string, backupSignal chan<- bool, startRoleElection chan<- bool,
 						}
 					}
 				}
-				
+
 				for i := 0; i < len(p.Lost); i++ {
-					
+
 					StoredOrders = distributeOrdersFromLostNode(p.Lost[i], LatestPeerList, StoredOrders, NodeStatusMap, orderTX, nodeStatusRX, requestRX)
-					
+
 				}
 
 			case <-ticker.C:
-				print("I am Primary")
+			
 				//sending status to backup
-				statusTX <- network.Status{TransmitterID: ID, Orders: StoredOrders}
+				statusTX <- network.Status{TransmitterID: ID, Orders: StoredOrders, NodeStatusMap: NodeStatusMap}
 				//periodic light update to nodes.
 
 				//when it is time to send light update:
@@ -248,12 +248,16 @@ func searchMap(index int) string {
 	return ""
 }
 
-func updateNodeMap(ID string, status network.SingleElevatorStatus, NodeStatusMap map[string]network.SingleElevatorStatus) {
-	if _, exists := NodeStatusMap[ID]; exists {
-		NodeStatusMap[ID] = status
+func updateNodeMap(status network.SingleElevatorStatus, NodeStatusMap map[string]network.SingleElevatorStatus) map[string]network.SingleElevatorStatus {
+	newNodeStatusMap := NodeStatusMap
+	if _, exists := NodeStatusMap[status.ID]; exists {
+		newNodeStatusMap[status.ID] = status
+
 	} else {
-		NodeStatusMap[ID] = status
+		newNodeStatusMap[status.ID] = status
+
 	}
+	return newNodeStatusMap
 }
 
 func makeLightMatrix(ID string, StoredOrders [config.MElevators][config.NFloors][config.NButtons]bool) [config.NFloors][config.NButtons]bool {

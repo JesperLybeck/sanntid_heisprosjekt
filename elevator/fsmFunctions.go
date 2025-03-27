@@ -111,7 +111,12 @@ func chooseDirection(E Elevator) DirectionStatePair {
 			return DirectionStatePair{MD_Stop, DoorOpen}
 
 		} else if OrdersBelow(E) {
-			return DirectionStatePair{MD_Down, MovingBetweenFloors}
+			if WasHallUp(E.Input.LastClearedButtons) {
+				print("-------------It was hall up, but we are are changing directions. Stopping 3 more second-------------")
+				return DirectionStatePair{MD_Stop, DoorOpen} //spesialcase ekstra dørtimer
+			} else {
+				return DirectionStatePair{MD_Down, MovingBetweenFloors}
+			}
 		} else {
 			return DirectionStatePair{MD_Stop, Idle}
 		}
@@ -122,7 +127,12 @@ func chooseDirection(E Elevator) DirectionStatePair {
 		} else if OrdersHere(E) {
 			return DirectionStatePair{MD_Stop, DoorOpen}
 		} else if OrdersAbove(E) {
-			return DirectionStatePair{MD_Up, MovingBetweenFloors}
+			if WasHallDown(E.Input.LastClearedButtons) {
+				print("---------------It was hall Down, but we are are changing directions. Stopping 3 more second-------------")
+				return DirectionStatePair{MD_Stop, DoorOpen} //spesialcase ekstra dørtimer
+			} else {
+				return DirectionStatePair{MD_Up, MovingBetweenFloors}
+			}
 		} else {
 			return DirectionStatePair{MD_Stop, Idle}
 		}
@@ -143,6 +153,20 @@ func chooseDirection(E Elevator) DirectionStatePair {
 	}
 	return DirectionStatePair{MD_Stop, Idle}
 
+}
+
+func LastClearedButtons(e Elevator, b Elevator) []ButtonEvent {
+	lcb := []ButtonEvent{}
+	order1 := e.Output.LocalOrders
+	order2 := b.Output.LocalOrders
+	for i := 0; i < config.NFloors; i++ {
+		for j := 0; j < config.NButtons; j++ {
+			if order1[i][j] != order2[i][j] {
+				lcb = append(lcb, ButtonEvent{Floor: i, Button: ButtonType(j)})
+			}
+		}
+	}
+	return lcb
 }
 
 func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
@@ -208,6 +232,7 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 
 			nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
 			nextElevator = ClearAtFloor(nextElevator)
+			nextElevator.Input.LastClearedButtons = LastClearedButtons(model, nextElevator)
 			nextElevator.Output.MotorDirection = MD_Stop
 			nextElevator.Output.Door = true
 
@@ -228,6 +253,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 
 	nextElevator := E
 	switch nextElevator.State {
+	// Er ikke alltid døren åpen når den timer ut?
 	case DoorOpen:
 
 		DirectionStatePair := chooseDirection(nextElevator)
@@ -274,6 +300,24 @@ func LightsDifferent(lightArray1 [config.NFloors][config.NButtons]bool, lightArr
 			if lightArray1[i][j] != lightArray2[i][j] {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func WasHallUp(buttonArray []ButtonEvent) bool {
+	for i := 0; i < len(buttonArray); i++ {
+		if buttonArray[i].Button == BT_HallUp {
+			return true
+		}
+	}
+	return false
+}
+
+func WasHallDown(buttonArray []ButtonEvent) bool {
+	for i := 0; i < len(buttonArray); i++ {
+		if buttonArray[i].Button == BT_HallDown {
+			return true
 		}
 	}
 	return false

@@ -24,6 +24,7 @@ type ElevatorOutput struct {
 type ElevatorInput struct {
 	LocalRequests [config.NFloors][config.NButtons]bool
 	PrevFloor     int
+	LastClearedButtons []ButtonEvent
 }
 type Elevator struct {
 	State              ElevatorState
