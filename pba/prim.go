@@ -6,6 +6,7 @@ import (
 	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
 	"Sanntid/networkDriver/peers"
+	"fmt"
 	"time"
 )
 
@@ -48,7 +49,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 	if takeOverInProgress {
 		//do stuff
 
-		lostOrders := make([]network.Order, 0)
+		var lostOrders []network.Order
 		storedOrders, lostOrders = distributeOrdersFromLostNode(previousprimaryID, storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
 		print("Lost orders: ", lostOrders)
 		for order := 0; order < len(lostOrders); order++ {
@@ -106,7 +107,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 
 			for i := 0; i < len(p.Lost); i++ {
 				//alle som dør
-				lostOrders := make([]network.Order, 0)
+				var lostOrders []network.Order
 				storedOrders, lostOrders = distributeOrdersFromLostNode(p.Lost[i], storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
 				print("Lost orders: ", lostOrders)
 				for order := 0; order < len(lostOrders); order++ {
@@ -151,7 +152,6 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 				continue
 			}*/
 			//Update storedOrders
-			print("received order")
 
 			lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, lastMessagesMap)
 			if lastMessageNumber == a.RequestID {
@@ -191,7 +191,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 				index, _ := getOrAssignIndex(a.ID, config.IDToIndexMap) //kan bli -1 hvis vi ikke er i mappet.
 
 				storedOrders = updateOrders(a.Orders, index, storedOrders)
-
+				fmt.Println(storedOrders)
 				lastMessagesMap[a.ID] = a.RequestID
 			}
 
@@ -224,16 +224,7 @@ func updateOrders(ordersFromNode [config.NFloors][config.NButtons]bool, elevator
 
 	return newstoredOrders
 }
-func getIndex(ip string, idIndexMap map[string]int) (int, bool) {
 
-	if index, exists := idIndexMap[ip]; exists {
-
-		return index, true
-	} else {
-		return -1, false
-	}
-
-}
 func getOrAssignIndex(ip string, idIndexMap map[string]int) (int, bool) {
 
 	if index, exists := idIndexMap[ip]; exists {

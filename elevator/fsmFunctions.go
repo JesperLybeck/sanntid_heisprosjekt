@@ -281,6 +281,7 @@ func LastClearedButtons(e Elevator, b Elevator) []ButtonEvent {
 }*/
 
 func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
+	
 	wasIdleAtNewOrder := E.State == Idle
 	nextElevator := E
 	nextElevator.Output.LocalOrders[order.Floor][order.Button] = true //legger inn den nye ordren.
@@ -294,8 +295,10 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 		if shouldClearImmediately(nextElevator, order) {
 			//uten disse, vil heisen stå i 6 sekunder.
 			print("----------->>clearing immediatly<<-----")
+			model := nextElevator
 			nextElevator.Output.LocalOrders[order.Floor][order.Button] = false
 			nextElevator.Output.LocalOrders[order.Floor][BT_Cab] = false
+			nextElevator.Input.LastClearedButtons = LastClearedButtons(nextElevator, model)
 			nextElevator.Output.MotorDirection = MD_Stop
 			nextElevator.State = DoorOpen
 			nextElevator.Output.Door = true
@@ -314,11 +317,14 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 		DirectionStatePair := chooseDirection(nextElevator)
 		if DirectionStatePair.State == DoorOpen {
 			nextElevator.ObstructionTimer.Reset(7 * time.Second)
-
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
-
+			model := nextElevator
 			nextElevator = ClearAtFloor(nextElevator)
+			fmt.Println(nextElevator.Output.LocalOrders)
+			nextElevator.Input.LastClearedButtons = LastClearedButtons(model, nextElevator)
+			fmt.Println("----------",nextElevator.Input.LastClearedButtons,"--------------")
+
 		}
 
 		nextElevator.Output.MotorDirection = DirectionStatePair.Direction

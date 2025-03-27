@@ -20,7 +20,6 @@ func Backup(ID string, primaryElection <-chan network.Election, done chan<- netw
 	var latestPeerList peers.PeerUpdate
 	var primaryID string
 	var previousPrimaryID string
-	var id string
 	var nodeMap map[string]network.SingleElevatorStatus
 	//var takeOverInProgress bool
 
@@ -56,8 +55,6 @@ func Backup(ID string, primaryElection <-chan network.Election, done chan<- netw
 
 				latestPeerList = removeFromActivePeers(primaryID, latestPeerList)
 				previousPrimaryID = primaryID
-
-				primaryID = id
 
 				takeoverState := network.Takeover{
 					StoredOrders:       latestStatusFromPrimary.Orders,

@@ -26,47 +26,30 @@ func argmin(arr []CostTuple) string {
 }
 
 // indexOf function to find the index of the minimum value
-func indexOf(arr []int, value int) int {
-	for i, v := range arr {
-		if v == value {
-			return i
-		}
-	}
-	return -1 // Return -1 if the value is not found
-}
 
 func AssignOrder(request network.Order, peerList peers.PeerUpdate, nodeStatus map[string]network.SingleElevatorStatus) string {
 
 	for {
-		select {
-		/*
-			case update := <-peerCh:
-				peerList = update
-				fmt.Println("Peerupdate in assigner, change of LatestPeerList")
-		*/
-		default:
+		costs := make([]CostTuple, len(peerList.Peers)) // costs for each elevator
+		if request.ButtonEvent.Button == elevator.BT_Cab {
+			return request.ResponisbleElevator
+		}
 
-			costs := make([]CostTuple, len(peerList.Peers)) // costs for each elevator
-			if request.ButtonEvent.Button == elevator.BT_Cab {
-				return request.ResponisbleElevator
-			}
+		for p := 0; p < len(peerList.Peers); p++ {
+			peerStatus := nodeStatus[peerList.Peers[p]]
+			costs[p].ID = peerList.Peers[p]
+			distanceCost := (peerStatus.PrevFloor - request.ButtonEvent.Floor) * (peerStatus.PrevFloor - request.ButtonEvent.Floor)
+			//Optional: add directional contribution to cost.
 
-			for p := 0; p < len(peerList.Peers); p++ {
-				peerStatus := nodeStatus[peerList.Peers[p]]
-				costs[p].ID = peerList.Peers[p]
-				distanceCost := (peerStatus.PrevFloor - request.ButtonEvent.Floor) * (peerStatus.PrevFloor - request.ButtonEvent.Floor)
-				//Optional: add directional contribution to cost.
+			costs[p].Cost = distanceCost // + directionCost
 
-				costs[p].Cost = distanceCost // + directionCost
+		}
+		//fmt.Println("costs:", costs)
+		responsibleElevator := argmin(costs)
 
-			}
-			//fmt.Println("costs:", costs)
-			responsibleElevator := argmin(costs)
+		if responsibleElevator != "" {
 
-			if responsibleElevator != "" {
-
-				return responsibleElevator
-			}
+			return responsibleElevator
 		}
 	}
 

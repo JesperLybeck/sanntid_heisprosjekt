@@ -3,6 +3,7 @@ package main
 import (
 	"Sanntid/config"
 	"Sanntid/elevator"
+	"fmt"
 
 	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
@@ -243,17 +244,17 @@ func main() {
 
 			E.OrderCompleteTimer.Stop()
 			print("sending order complete message")
-
-			for i := range E.Input.LastClearedButtons {
-				orderMessage := network.Request{ButtonEvent: E.Input.LastClearedButtons[i],
+			fmt.Println(E.Input.LastClearedButtons)
+			for i := 0; i < len(E.Input.LastClearedButtons); i++ {
+				orderMessage := network.Request{ButtonEvent: E.Input.LastClearedButtons[0],
 					ID:        ID,
 					Orders:    E.Output.LocalOrders,
 					RequestID: NumRequests}
 
 				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests, config.IDToIndexMap)
 				NumRequests++
-				E.Input.LastClearedButtons = RemoveClearedOrder(E.Input.LastClearedButtons, E.Input.LastClearedButtons[i])
-			}
+				E.Input.LastClearedButtons = RemoveClearedOrder(E.Input.LastClearedButtons, E.Input.LastClearedButtons[0])
+			}  
 
 		case <-E.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
