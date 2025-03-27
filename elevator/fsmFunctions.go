@@ -63,11 +63,17 @@ func shouldStop(E Elevator) bool {
 
 // checking if the order is to be cleared immediately.
 func shouldClearImmediately(E Elevator, btnEvent ButtonEvent) bool {
+	print("check 0------>", (E.Input.PrevFloor == btnEvent.Floor), "<----")
+	print("Check1---->", (E.Input.PrevFloor == btnEvent.Floor) && (E.Output.MotorDirection == MD_Up && btnEvent.Button == BT_HallUp), "<----")
+	print("Check2---->", (E.Output.MotorDirection == MD_Down && btnEvent.Button == BT_HallDown), "<----")
+	print("Check3---->", (E.Output.MotorDirection == MD_Stop), "----")
+	print("Check4---->", (btnEvent.Button == BT_Cab) && !(E.State == DoorOpen), "----")
 
 	return ((E.Input.PrevFloor == btnEvent.Floor) && ((E.Output.MotorDirection == MD_Up && btnEvent.Button == BT_HallUp) ||
 		(E.Output.MotorDirection == MD_Down && btnEvent.Button == BT_HallDown) ||
 		(E.Output.MotorDirection == MD_Stop) ||
-		(btnEvent.Button == BT_Cab)) && !(E.State == DoorOpen))
+		(btnEvent.Button == BT_Cab)))
+	//&& !(E.State == DoorOpen))
 
 }
 
@@ -155,8 +161,10 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 	switch nextElevator.State {
 
 	case DoorOpen:
+		print("!!!!case DoorOpen!!!!")
 		if shouldClearImmediately(nextElevator, order) {
 			//uten disse, vil heisen stå i 6 sekunder.
+			print("----------->>clearing immediatly<<-----")
 			nextElevator.Output.LocalOrders[order.Floor][order.Button] = false
 			nextElevator.Output.LocalOrders[order.Floor][BT_Cab] = false
 			nextElevator.Output.MotorDirection = MD_Stop
@@ -164,6 +172,7 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator.ObstructionTimer.Reset(7 * time.Second)
+			nextElevator.OrderCompleteTimer.Reset(config.OrderTimeout * time.Second)
 			print("Clearing order immediately, resetting obstruction timer")
 			//her returnerer vi tomt, så prim som venter på ack, får aldri denne.
 
@@ -171,12 +180,12 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 		}
 
 	case Idle:
-
+		print("<<<case IDLE>>>>")
 		nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
 		DirectionStatePair := chooseDirection(nextElevator)
 		if DirectionStatePair.State == DoorOpen {
 			nextElevator.ObstructionTimer.Reset(7 * time.Second)
-			print("Clearing order immediately, resetting obstruction timer")
+
 			nextElevator.Output.Door = true
 			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator = ClearAtFloor(nextElevator)
