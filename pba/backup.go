@@ -2,6 +2,7 @@ package pba
 
 import (
 	"Sanntid/config"
+	"fmt"
 
 	"Sanntid/network"
 
@@ -11,39 +12,62 @@ import (
 
 var LatestStatusFromPrimary network.Status
 
-func Backup(ID string, primaryElection chan<- network.Election) {
+func Backup(ID string, primaryElection <-chan network.Election) {
 	// Set timeout duration
 	var primaryStatusRX = make(chan network.Status)
 	var peerUpdateRX = make(chan peers.PeerUpdate)
+	var latestStatusFromPrimary network.Status
+	var latestPeerList peers.PeerUpdate
+	var primaryID string
+	var previousPrimaryID string
+	var id string
+	//var takeOverInProgress bool
 
 	go bcast.Receiver(13055, primaryStatusRX)
 	go peers.Receiver(12055, peerUpdateRX)
-	print("Backup")
+	//print("i am backup")
 
 	for {
-		if PrimaryID != ID {
+		print("i am backup!")
+		select {
+		case p := <-primaryElection:
+			if p.PrimaryID == ID {
+				go Primary(ID, primaryElection, latestStatusFromPrimary)
+				return
+			}
 
-			select {
-
-			case p := <-peerUpdateRX:
-				LatestPeerList = p
-				if primInPeersLost(PrimaryID, p) {
-
-					LatestPeerList = removeFromActivePeers(PrimaryID, LatestPeerList)
-					PreviousPrimaryID = PrimaryID
-					PrimaryID = ID
-					BackupID = ""
-					TakeOverInProgress = true
-
+		case p := <-peerUpdateRX:
+			fmt.Print("peerupdate", p)
+			latestPeerList = p
+			if primInPeersLost(primaryID, p) {
+				print("Primary lost")
+				latestPeerList = removeFromActivePeers(primaryID, latestPeerList)
+				previousPrimaryID = primaryID
+				print("prev primaryID: ", previousPrimaryID)
+				primaryID = id
+				print("becoming primary")
+				//takeOverInProgress = true
+				takeoverState := network.Status{
+					TransmitterID:      id,
+					Orders:             latestStatusFromPrimary.Orders,
+					StatusID:           latestStatusFromPrimary.StatusID + 1,
+					AloneOnNetwork:     false,
+					PreviousPrimaryID:  previousPrimaryID,
+					TakeOverInProgress: true,
+					PeerList:           latestPeerList,
 				}
-
-			case p := <-primaryStatusRX:
-				//print("I am backup")
-				StoredOrders = p.Orders //denne bøurde vi gjøre lokal.
-				config.IpToIndexMap = p.Map
+				fmt.Print("sending takeoverstate,", takeoverState.Orders)
+				go Primary(ID, primaryElection, takeoverState)
+				return
 
 			}
+
+		case p := <-primaryStatusRX:
+			latestStatusFromPrimary = p
+			primaryID = p.TransmitterID
+
 		}
+
 	}
 
 }

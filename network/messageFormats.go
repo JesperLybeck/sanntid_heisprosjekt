@@ -3,15 +3,18 @@ package network
 import (
 	"Sanntid/config"
 	"Sanntid/elevator"
+	"Sanntid/networkDriver/peers"
 )
 
 // -------------------------------Message formats--------------------
 type Status struct {
-	TransmitterID string
-	ReceiverID    string
-	Orders        [config.MElevators][config.NFloors][config.NButtons]bool
-	Map           map[string]int
-	StatusID      int
+	TransmitterID      string
+	Orders             [config.MElevators][config.NFloors][config.NButtons]bool
+	StatusID           int
+	PreviousPrimaryID  string
+	AloneOnNetwork     bool
+	TakeOverInProgress bool
+	PeerList           peers.PeerUpdate
 }
 
 type Election struct {
@@ -19,11 +22,11 @@ type Election struct {
 	LostNodeID         string
 	PrimaryID          string
 	BackupID           string
+	MergedOrders       [config.MElevators][config.NFloors][config.NButtons]bool
 }
 type Request struct {
 	ButtonEvent elevator.ButtonEvent
 	ID          string
-	TargetID    string
 	Orders      [config.NFloors][config.NButtons]bool
 	RequestID   int
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"Sanntid/config"
 	"Sanntid/elevator"
+	"fmt"
 
 	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
@@ -39,11 +40,14 @@ func main() {
 	OrderCompletedTX := make(chan network.Request)
 	LightUpdateFromPrimRX := make(chan network.LightUpdate)
 	peersRX := make(chan peers.PeerUpdate)
+	primStatusRX := make(chan network.Status)
 
 	buttonPressCh := make(chan elevator.ButtonEvent)
 	floorReachedCh := make(chan int)
 
 	primaryMerge := make(chan network.Election)
+
+	aloneOnNetwork := true
 
 	//doorTimeoutCh := make(chan bool)
 
@@ -70,10 +74,6 @@ func main() {
 		startingAsPrimary = false
 	}
 
-	if startingAsPrimary {
-		pba.PrimaryID = ID
-	}
-
 	elevatorPortNumber = os.Getenv("PORT") // Read the environment variable
 	if elevatorPortNumber == "" {
 		elevatorPortNumber = "15657" // Default value if the environment variable is not set
@@ -83,6 +83,7 @@ func main() {
 	var prevLightMatrix [config.NFloors][config.NButtons]bool
 	var NumRequests int = 1
 	var lastOrderID int = 0
+	var idToIndexMap map[string]int
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevator.Init("localhost:"+elevatorPortNumber, config.NFloors) //when starting, the elevator goes up until it reaches a floor.
@@ -115,8 +116,22 @@ func main() {
 	E.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.RoleElection(ID, primaryMerge)
-	go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
-	go pba.Backup(ID, primaryMerge)
+
+	initialPrimaryState := network.Status{
+		TransmitterID: ID,
+		Orders:        [config.MElevators][config.NFloors][config.NButtons]bool{},
+		StatusID:      0,
+	}
+	//go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
+	fmt.Print("Starting as primary: ", startingAsPrimary)
+	if startingAsPrimary {
+		go pba.Primary(ID, primaryMerge, initialPrimaryState)
+		print("Starting as primary")
+	} else {
+		print("Starting as backup")
+		go pba.Backup(ID, primaryMerge)
+
+	}
 
 	go elevator.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevator.PollFloorSensor(floorReachedCh)
@@ -126,6 +141,7 @@ func main() {
 	go bcast.Transmitter(13058, OrderCompletedTX)
 	go bcast.Transmitter(13059, nodeStatusTX)
 	go bcast.Receiver(13060, LightUpdateFromPrimRX)
+	go bcast.Receiver(13055, primStatusRX)
 	go peers.Transmitter(12055, ID, peerTX)
 	go peers.Receiver(12055, peersRX)
 
@@ -133,14 +149,10 @@ func main() {
 	for {
 
 		select {
-		/*case primStatus := <-primStatusRX:
-		//Hva om vi gjør en del av dette her, heller enn i pba?
-		fsm.IpToIndexMap = primStatus.Map
-		fsm.LatestPeerList = primStatus.Peerlist	*/
 
 		case p := <-peersRX: //vi klarer oss vell uten denne, med casen over?
 			// To register if alone on network and enter offline mode
-			pba.AloneOnNetwork = len(p.Peers) == 0 /*
+			aloneOnNetwork = len(p.Peers) == 0 /*
 				if len(p.Peers) == 0 {
 					pba.AloneOnNetwork = true
 				} else {
@@ -167,16 +179,15 @@ func main() {
 			requestToPrimary := network.Request{
 				ButtonEvent: btnEvent,
 				ID:          ID,
-				TargetID:    pba.PrimaryID,
 				Orders:      E.Input.LocalRequests,
 				RequestID:   NumRequests,
 			}
 			// ISSUE! when the order is delegated to a different node, we cant ack on
 
-			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests)
+			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests, idToIndexMap)
 			NumRequests++
 
-			if pba.AloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
+			if aloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
 				offlineOrder := network.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
 				E = elevator.HandleNewOrder(offlineOrder.ButtonEvent, E) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevator.SetButtonLamp(elevator.BT_Cab, btnEvent.Floor, true)
@@ -212,7 +223,7 @@ func main() {
 
 			setHardwareEffects(E)
 
-			if pba.AloneOnNetwork {
+			if aloneOnNetwork {
 				elevator.SetButtonLamp(elevator.BT_Cab, a, false)
 			}
 
@@ -230,11 +241,10 @@ func main() {
 			for i := range lastClearedButtons {
 				orderMessage := network.Request{ButtonEvent: lastClearedButtons[i],
 					ID:        ID,
-					TargetID:  pba.PrimaryID,
 					Orders:    E.Output.LocalOrders,
 					RequestID: NumRequests}
 
-				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests)
+				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests, idToIndexMap)
 				NumRequests++
 			}
 

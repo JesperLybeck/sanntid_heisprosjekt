@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestID int) {
+func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestID int, idToIndexMap map[string]int) {
 
 	primStatusRX := make(chan Status)
 	go bcast.Receiver(13055, primStatusRX)
@@ -37,7 +37,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 			floor := message.ButtonEvent.Floor
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
-			j := config.IpToIndexMap[message.ID]
+			j := idToIndexMap[message.ID]
 			if button == elevator.BT_Cab {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 					print("--------- Request acked ---------")
@@ -83,7 +83,7 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			}
 		case <-messageTimer.C:
 			RequestID := message.OrderID
-			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: nodeStatusMap[ID].Orders, RequestID: RequestID}
+			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, RequestID: RequestID}
 			ResendChan <- Reassign
 			return
 
