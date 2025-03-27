@@ -151,6 +151,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 				continue
 			}*/
 			//Update storedOrders
+			print("received order")
 
 			lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, lastMessagesMap)
 			if lastMessageNumber == a.RequestID {
@@ -180,6 +181,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 		case a := <-RXFloorReached:
 
 			lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, lastMessagesMap)
+			print("received order completed")
 			if lastMessageNumber == a.RequestID {
 
 				continue

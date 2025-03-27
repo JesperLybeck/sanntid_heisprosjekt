@@ -22,8 +22,9 @@ type ElevatorOutput struct {
 }
 
 type ElevatorInput struct {
-	LocalRequests [config.NFloors][config.NButtons]bool
-	PrevFloor     int
+	LocalRequests      [config.NFloors][config.NButtons]bool
+	PrevFloor          int
+	LastClearedButtons []ButtonEvent
 }
 type Elevator struct {
 	State              ElevatorState
@@ -36,6 +37,7 @@ type Elevator struct {
 }
 
 type DirectionStatePair struct {
-	Direction MotorDirection
-	State     ElevatorState
+	Direction  MotorDirection
+	State      ElevatorState
+	ExtraTimer bool
 }

@@ -30,7 +30,6 @@ var startingAsPrimary bool
 var elevatorPortNumber string
 
 func main() {
-	var lastClearedButtons []elevator.ButtonEvent
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
 	nodeStatusTX := make(chan network.SingleElevatorStatus) //strictly having both should be unnecessary.
@@ -82,7 +81,6 @@ func main() {
 	var prevLightMatrix [config.NFloors][config.NButtons]bool
 	var NumRequests int = 1
 	var lastOrderID int = 0
-	var idToIndexMap map[string]int
 
 	//-----------------------------INITIALIZING ELEVATOR-----------------------------
 	elevator.Init("localhost:"+elevatorPortNumber, config.NFloors) //when starting, the elevator goes up until it reaches a floor.
@@ -194,7 +192,7 @@ func main() {
 			}
 			// ISSUE! when the order is delegated to a different node, we cant ack on
 
-			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests, idToIndexMap)
+			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests, config.IDToIndexMap)
 			NumRequests++
 
 			if aloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
@@ -227,9 +225,7 @@ func main() {
 
 		case a := <-floorReachedCh:
 
-			temp := E
 			E = elevator.HandleFloorReached(a, E)
-			lastClearedButtons = LastClearedButtons(temp, E)
 
 			setHardwareEffects(E)
 
@@ -248,21 +244,22 @@ func main() {
 			E.OrderCompleteTimer.Stop()
 			print("sending order complete message")
 
-			for i := range lastClearedButtons {
-				orderMessage := network.Request{ButtonEvent: lastClearedButtons[i],
+			for i := range E.Input.LastClearedButtons {
+				orderMessage := network.Request{ButtonEvent: E.Input.LastClearedButtons[i],
 					ID:        ID,
 					Orders:    E.Output.LocalOrders,
 					RequestID: NumRequests}
 
-				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests, idToIndexMap)
+				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests, config.IDToIndexMap)
 				NumRequests++
+				E.Input.LastClearedButtons = RemoveClearedOrder(E.Input.LastClearedButtons, E.Input.LastClearedButtons[i])
 			}
 
 		case <-E.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
 			panic("Node failed to complete order, possible engine failure or faulty sensor")
 		case <-E.ObstructionTimer.C:
-			print("Node failed to complete order. throwing panic")
+
 			panic("Node failed to complete order, door obstruction")
 		case <-statusTicker.C:
 
@@ -274,16 +271,13 @@ func main() {
 
 }
 
-func LastClearedButtons(e elevator.Elevator, b elevator.Elevator) []elevator.ButtonEvent {
-	lcb := []elevator.ButtonEvent{}
-	order1 := e.Output.LocalOrders
-	order2 := b.Output.LocalOrders
-	for i := 0; i < config.NFloors; i++ {
-		for j := 0; j < config.NButtons; j++ {
-			if order1[i][j] != order2[i][j] {
-				lcb = append(lcb, elevator.ButtonEvent{Floor: i, Button: elevator.ButtonType(j)})
-			}
+// denne må flyttes!!!!
+func RemoveClearedOrder(clearedOrders []elevator.ButtonEvent, event elevator.ButtonEvent) []elevator.ButtonEvent {
+	var remainingOrders []elevator.ButtonEvent
+	for i := 0; i < len(clearedOrders); i++ {
+		if clearedOrders[i] != event {
+			remainingOrders = append(remainingOrders, clearedOrders[i])
 		}
 	}
-	return lcb
+	return remainingOrders
 }

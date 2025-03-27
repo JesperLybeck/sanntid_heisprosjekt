@@ -38,6 +38,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
 			j := idToIndexMap[message.ID]
+			print("--------j: ", j, "----id, ", message.ID, "<------")
 			if button == elevator.BT_Cab {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 					print("--------- Request acked ---------")
