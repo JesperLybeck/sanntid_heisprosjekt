@@ -2,6 +2,7 @@ package pba
 
 import (
 	"Sanntid/config"
+	"time"
 
 	"Sanntid/network"
 
@@ -11,41 +12,55 @@ import (
 
 var LatestStatusFromPrimary network.Status
 
-func Backup(ID string, primaryElection chan<- network.Election) {
+func Backup(ID string, backupSignal <-chan bool, primaryTakeover chan<- network.Takeover) {
 	// Set timeout duration
-	var primaryStatusRX = make(chan network.Status)
-	var peerUpdateRX = make(chan peers.PeerUpdate)
-
-	go bcast.Receiver(13055, primaryStatusRX)
-	go peers.Receiver(12055, peerUpdateRX)
-	print("Backup")
-
 	for {
-		if PrimaryID != ID {
+		print("Waiting to become backup")
+		<-backupSignal
 
+		var primaryStatusRX = make(chan network.Status)
+		var peerUpdateRX = make(chan peers.PeerUpdate)
+		var backupStoredOrders = [config.MElevators][config.NFloors][config.NButtons]bool{}
+		var backupNodeStatusMap = make(map[string]network.SingleElevatorStatus)
+		var backupLatestPeerList peers.PeerUpdate
+
+		go bcast.Receiver(13055, primaryStatusRX)
+		go peers.Receiver(12055, peerUpdateRX)
+		print("Backup")
+		time.Sleep(2 * time.Second)
+		primID := ""
+		
+
+	backupLoop:
+		for {
 			select {
-
+			case p := <-primaryStatusRX:
+				print("I am backup")
+				backupStoredOrders = p.Orders //denne bøurde vi gjøre lokal.
+				primID = p.TransmitterID
+				backupNodeStatusMap = p.NodeStatusMap
 			case p := <-peerUpdateRX:
-				LatestPeerList = p
-				if primInPeersLost(PrimaryID, p) {
+				backupLatestPeerList = p
+				if primInPeersLost(primID, p) {
 
-					LatestPeerList = removeFromActivePeers(PrimaryID, LatestPeerList)
-					PreviousPrimaryID = PrimaryID
-					PrimaryID = ID
-					BackupID = ""
-					TakeOverInProgress = true
+					backupLatestPeerList = removeFromActivePeers(primID, backupLatestPeerList)
+					takeover := network.Takeover{TakeOverInProgress: true,
+						LostNodeID:     primID,
+						BackupID:       "",
+						PrimaryID:      ID,
+						StoredOrders:   backupStoredOrders,
+						NodeStatusMap: backupNodeStatusMap,
+						LatestPeerList: backupLatestPeerList}
+
+					primaryTakeover <- takeover
+					print("Primary timed out")
+					break backupLoop
 
 				}
-
-			case p := <-primaryStatusRX:
-				//print("I am backup")
-				StoredOrders = p.Orders //denne bøurde vi gjøre lokal.
-				config.IpToIndexMap = p.Map
 
 			}
 		}
 	}
-
 }
 
 func primInPeersLost(primID string, peerUpdate peers.PeerUpdate) bool {

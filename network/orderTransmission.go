@@ -5,7 +5,6 @@ import (
 	"Sanntid/elevator"
 	"Sanntid/networkDriver/bcast"
 
-	"strconv"
 	"time"
 )
 
@@ -91,14 +90,4 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 
 		}
 	}
-}
-
-func incrementMessage(messageID string) string {
-	nodeID := messageID[:3]
-	messageNumber := messageID[3:]
-	messageNumberInt, _ := strconv.Atoi(messageNumber)
-	messageNumberInt++
-	messageNumber = strconv.Itoa(messageNumberInt)
-	return nodeID + messageNumber
-
 }

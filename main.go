@@ -31,6 +31,7 @@ var elevatorPortNumber string
 
 func main() {
 	var lastClearedButtons []elevator.ButtonEvent
+	var AloneOnNetwork bool
 	//-----------------------------CHANNELS-----------------------------
 	peerTX := make(chan bool)
 	nodeStatusTX := make(chan network.SingleElevatorStatus) //strictly having both should be unnecessary.
@@ -44,6 +45,10 @@ func main() {
 	floorReachedCh := make(chan int)
 
 	primaryMerge := make(chan network.Election)
+	primaryTakeover := make(chan network.Takeover)
+
+	activateBackup := make(chan bool)
+	startRoleElection := make(chan bool)
 
 	//doorTimeoutCh := make(chan bool)
 
@@ -68,10 +73,6 @@ func main() {
 		startingAsPrimary = true
 	} else {
 		startingAsPrimary = false
-	}
-
-	if startingAsPrimary {
-		pba.PrimaryID = ID
 	}
 
 	elevatorPortNumber = os.Getenv("PORT") // Read the environment variable
@@ -114,9 +115,16 @@ func main() {
 
 	E.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
-	go pba.RoleElection(ID, primaryMerge)
-	go pba.Primary(ID, primaryMerge) //starting go routines for primary and backup.
-	go pba.Backup(ID, primaryMerge)
+	go pba.RoleElection(ID, activateBackup, startRoleElection, primaryMerge)
+	go pba.Primary(ID, activateBackup, startRoleElection, primaryMerge, primaryTakeover) //starting go routines for primary and backup.
+	go pba.Backup(ID, activateBackup, primaryTakeover)
+
+	if startingAsPrimary {
+		time.Sleep(500 * time.Millisecond)
+		primaryTakeover <- network.Takeover{TakeOverInProgress: false}
+	} else {
+		activateBackup <- true
+	}
 
 	go elevator.PollButtons(buttonPressCh) //starting go routines for polling HW
 	go elevator.PollFloorSensor(floorReachedCh)
@@ -140,12 +148,11 @@ func main() {
 
 		case p := <-peersRX: //vi klarer oss vell uten denne, med casen over?
 			// To register if alone on network and enter offline mode
-			pba.AloneOnNetwork = len(p.Peers) == 0 /*
-				if len(p.Peers) == 0 {
-					pba.AloneOnNetwork = true
-				} else {
-					pba.AloneOnNetwork = false
-				}*/
+			if len(p.Peers) == 0 {
+				AloneOnNetwork = true
+			} else {
+				AloneOnNetwork = false
+			}
 		case lights := <-LightUpdateFromPrimRX:
 
 			//when light update is received from primary, the node updates its own lights with the newest information.
@@ -167,7 +174,6 @@ func main() {
 			requestToPrimary := network.Request{
 				ButtonEvent: btnEvent,
 				ID:          ID,
-				TargetID:    pba.PrimaryID,
 				Orders:      E.Input.LocalRequests,
 				RequestID:   NumRequests,
 			}
@@ -176,8 +182,8 @@ func main() {
 			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests)
 			NumRequests++
 
-			if pba.AloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
-				offlineOrder := network.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
+			if AloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
+				offlineOrder := network.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID, OrderID: 1}
 				E = elevator.HandleNewOrder(offlineOrder.ButtonEvent, E) //når vi mottar en ny ordre kaller vi på en pure function, som returnerer heisen i neste tidssteg.
 				elevator.SetButtonLamp(elevator.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(E)
@@ -212,7 +218,7 @@ func main() {
 
 			setHardwareEffects(E)
 
-			if pba.AloneOnNetwork {
+			if AloneOnNetwork {
 				elevator.SetButtonLamp(elevator.BT_Cab, a, false)
 			}
 
@@ -230,7 +236,6 @@ func main() {
 			for i := range lastClearedButtons {
 				orderMessage := network.Request{ButtonEvent: lastClearedButtons[i],
 					ID:        ID,
-					TargetID:  pba.PrimaryID,
 					Orders:    E.Output.LocalOrders,
 					RequestID: NumRequests}
 

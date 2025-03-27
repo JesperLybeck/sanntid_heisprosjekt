@@ -26,14 +26,6 @@ func argmin(arr []CostTuple) string {
 }
 
 // indexOf function to find the index of the minimum value
-func indexOf(arr []int, value int) int {
-	for i, v := range arr {
-		if v == value {
-			return i
-		}
-	}
-	return -1 // Return -1 if the value is not found
-}
 
 func AssignOrder(request network.Order, peerList peers.PeerUpdate, nodeStatus map[string]network.SingleElevatorStatus) string {
 

@@ -7,3 +7,10 @@ const NButtons int = 3
 const MElevators int = 3
 
 const OrderTimeout time.Duration = 5
+
+
+var IpToIndexMap = map[string]int{
+	"11": 0,
+	"22": 1,
+	"33": 2,
+}
