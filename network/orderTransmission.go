@@ -11,7 +11,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, idToInde
 	primStatusRX := make(chan Status)
 	go bcast.Receiver(13055, primStatusRX)
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
-	messageTimer := time.NewTimer(10 * time.Second)
+	messageTimer := time.NewTimer(5 * time.Second)
 	defer sendingTicker.Stop()
 	messagesSent := 0
 	for {

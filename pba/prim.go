@@ -35,7 +35,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 	go bcast.Receiver(13059, nodeStatusRX)
 	go bcast.Transmitter(13060, TXLightUpdates)
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
 	lightUpdateTicker := time.NewTicker(50 * time.Millisecond)
 
 	if takeOverInProgress {

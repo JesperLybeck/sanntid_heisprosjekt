@@ -86,7 +86,7 @@ func main() {
 	go elevator.PollButtons(buttonPressCh)
 	go elevator.PollFloorSensor(floorReachedCh)
 
-	statusTicker := time.NewTicker(100 * time.Millisecond)
+	statusTicker := time.NewTicker(50 * time.Millisecond)
 
 	for {
 		select {
