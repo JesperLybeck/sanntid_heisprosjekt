@@ -46,6 +46,7 @@ func main() {
 	var NumRequests int = 1
 	var lastOrderID int = 0
 	var aloneOnNetwork = true
+	var nodeStatusMap = make(map[string]network.SingleElevatorStatus)
 
 	elevator.Init("localhost:"+elevatorPortNumber, config.NFloors)
 	initializeElevator(E)
@@ -66,7 +67,7 @@ func main() {
 		StoredOrders:       [config.MElevators][config.NFloors][config.NButtons]bool{},
 		PreviousPrimaryID:  "",
 		Peerlist:           peers.PeerUpdate{},
-		NodeMap:            map[string]network.SingleElevatorStatus{},
+		NodeMap:            nodeStatusMap,
 		TakeOverInProgress: false,
 	}
 	if startingAsPrimary {

@@ -19,7 +19,6 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, idToInde
 		case <-sendingTicker.C:
 			transmitterChan <- message
 			messagesSent++
-			print(message.ID)
 
 		case status := <-primStatusRX:
 			floor := message.ButtonEvent.Floor

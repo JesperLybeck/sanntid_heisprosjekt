@@ -21,7 +21,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 	peersRX := make(chan peers.PeerUpdate)
 
 	var storedOrders = initialState.StoredOrders
-	var nodeStatusMap = make(map[string]network.SingleElevatorStatus)
+	var nodeStatusMap = initialState.NodeMap
 	var previousprimaryID = initialState.PreviousPrimaryID
 	var takeOverInProgress = initialState.TakeOverInProgress
 	var latestPeerList = initialState.Peerlist
