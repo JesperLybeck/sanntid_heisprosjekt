@@ -6,7 +6,6 @@ import (
 	"Sanntid/networkDriver/peers"
 )
 
-// -------------------------------Message formats--------------------
 type Status struct {
 	TransmitterID      string
 	Orders             [config.MElevators][config.NFloors][config.NButtons]bool

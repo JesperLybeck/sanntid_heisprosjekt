@@ -136,6 +136,17 @@ func chooseDirection(E Elevator) DirectionStatePair {
 	return DirectionStatePair{MD_Stop, Idle, false}
 }
 
+func LightsDifferent(lightArray1 [config.NFloors][config.NButtons]bool, lightArray2 [config.NFloors][config.NButtons]bool) bool {
+	for i := 0; i < config.NFloors; i++ {
+		for j := 0; j < config.NButtons; j++ {
+			if lightArray1[i][j] != lightArray2[i][j] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func LastClearedButtons(e Elevator, b Elevator) []ButtonEvent {
 	lcb := []ButtonEvent{}
 	order1 := e.Output.LocalOrders
@@ -148,6 +159,24 @@ func LastClearedButtons(e Elevator, b Elevator) []ButtonEvent {
 		}
 	}
 	return lcb
+}
+
+func WasHallUp(buttonArray []ButtonEvent) bool {
+	for i := 0; i < len(buttonArray); i++ {
+		if buttonArray[i].Button == BT_HallUp {
+			return true
+		}
+	}
+	return false
+}
+
+func WasHallDown(buttonArray []ButtonEvent) bool {
+	for i := 0; i < len(buttonArray); i++ {
+		if buttonArray[i].Button == BT_HallDown {
+			return true
+		}
+	}
+	return false
 }
 
 func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
@@ -185,7 +214,7 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 		nextElevator.State = DirectionStatePair.State
 	}
 	if nextElevator.Output.MotorDirection != MD_Stop && wasIdleAtNewOrder {
-		nextElevator.OrderCompleteTimer.Stop() // Stop before reset to ensure clean state
+		nextElevator.OrderCompleteTimer.Stop()
 		nextElevator.OrderCompleteTimer.Reset(config.OrderTimeout * time.Second)
 	}
 	return nextElevator
@@ -257,32 +286,4 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		}
 	}
 	return nextElevator
-}
-
-func LightsDifferent(lightArray1 [config.NFloors][config.NButtons]bool, lightArray2 [config.NFloors][config.NButtons]bool) bool {
-	for i := 0; i < config.NFloors; i++ {
-		for j := 0; j < config.NButtons; j++ {
-			if lightArray1[i][j] != lightArray2[i][j] {
-				return true
-			}
-		}
-	}
-	return false
-}
-func WasHallUp(buttonArray []ButtonEvent) bool {
-	for i := 0; i < len(buttonArray); i++ {
-		if buttonArray[i].Button == BT_HallUp {
-			return true
-		}
-	}
-	return false
-}
-
-func WasHallDown(buttonArray []ButtonEvent) bool {
-	for i := 0; i < len(buttonArray); i++ {
-		if buttonArray[i].Button == BT_HallDown {
-			return true
-		}
-	}
-	return false
 }

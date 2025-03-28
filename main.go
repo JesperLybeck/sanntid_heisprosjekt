@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// ----------------------------ENVIRONMENT VARIABLES-----------------------------
 var ID string
 var startingAsPrimaryEnv string
 var startingAsPrimary bool
@@ -121,7 +120,7 @@ func main() {
 			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, config.IDToIndexMap)
 			NumRequests++
 			if aloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
-				offlineOrder := network.Order{ButtonEvent: btnEvent, ResponisbleElevator: ID}
+				offlineOrder := network.Order{ButtonEvent: btnEvent}
 				E = elevator.HandleNewOrder(offlineOrder.ButtonEvent, E)
 				elevator.SetButtonLamp(elevator.BT_Cab, btnEvent.Floor, true)
 				setHardwareEffects(E)
