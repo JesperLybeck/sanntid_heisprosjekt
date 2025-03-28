@@ -3,7 +3,6 @@ package main
 import (
 	"Sanntid/config"
 	"Sanntid/elevator"
-	"fmt"
 
 	"Sanntid/network"
 	"Sanntid/networkDriver/bcast"
@@ -54,7 +53,7 @@ func main() {
 	//channels for internal communication is denoted with "eventCh" channels for external comms are named "EventTX or RX"
 
 	//-----------------------------TIMERS-----------------------------
-	statusTicker := time.NewTicker(30 * time.Millisecond)
+	statusTicker := time.NewTicker(100 * time.Millisecond)
 
 	//------------------------ASSIGNING ENVIRONMENT VARIABLES------------------------
 	ID = os.Getenv("ID")
@@ -106,11 +105,21 @@ func main() {
 	E.Input.PrevFloor = elevator.GetFloor()
 	E.DoorTimer = time.NewTimer(3 * time.Second)
 	E.Output.Door = true
+	E.DoorObstructed = elevator.GetObstruction()
 	E.OrderCompleteTimer = time.NewTimer(config.OrderTimeout * time.Second)
 	E.ObstructionTimer = time.NewTimer(7 * time.Second)
 
+	if E.DoorObstructed {
+		for {
+			if !elevator.GetObstruction() {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	} else {
 	E.ObstructionTimer.Stop()
-
+}
+	
 	E.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.RoleElection(ID, primaryMerge)
@@ -151,11 +160,13 @@ func main() {
 	for {
 
 		select {
+
 		case <-primaryRoutineDone:
+
 			print("demoting to backup")
 			go pba.Backup(ID, primaryMerge, backupRoutineDone)
 			//hvis noden er ferdig som prim (har blitt nedgradert)
-		case <-backupRoutineDone:
+		case initialPrimaryState := <-backupRoutineDone:
 			print("promoting to primary")
 			//hvis noden er ferdig som backup (har blitt oppgradert)
 			go pba.Primary(ID, primaryMerge, initialPrimaryState, primaryRoutineDone)
@@ -243,8 +254,7 @@ func main() {
 			setHardwareEffects(E)
 
 			E.OrderCompleteTimer.Stop()
-			print("sending order complete message")
-			fmt.Println(E.Input.LastClearedButtons)
+
 			for i := 0; i < len(E.Input.LastClearedButtons); i++ {
 				orderMessage := network.Request{ButtonEvent: E.Input.LastClearedButtons[0],
 					ID:        ID,
@@ -254,7 +264,7 @@ func main() {
 				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests, config.IDToIndexMap)
 				NumRequests++
 				E.Input.LastClearedButtons = RemoveClearedOrder(E.Input.LastClearedButtons, E.Input.LastClearedButtons[0])
-			}  
+			}
 
 		case <-E.OrderCompleteTimer.C:
 			print("Node failed to complete order. throwing panic")
@@ -263,7 +273,7 @@ func main() {
 
 			panic("Node failed to complete order, door obstruction")
 		case <-statusTicker.C:
-
+			
 			nodeStatusTX <- network.SingleElevatorStatus{ID: ID, PrevFloor: E.Input.PrevFloor, MotorDirection: E.Output.MotorDirection, Orders: E.Output.LocalOrders}
 
 		}

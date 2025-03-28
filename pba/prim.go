@@ -17,7 +17,9 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 
 	nodeStatusMap := make(map[string]network.SingleElevatorStatus)
 	previousprimaryID := initialState.PreviousPrimaryID
+
 	takeOverInProgress := initialState.TakeOverInProgress
+	print(takeOverInProgress)
 	latestPeerList := initialState.Peerlist
 
 	//TODO, PASS CHANNELS I GOROUTINES
@@ -48,7 +50,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 
 	if takeOverInProgress {
 		//do stuff
-
+		fmt.Println("Takeover in progress")
 		var lostOrders []network.Order
 		storedOrders, lostOrders = distributeOrdersFromLostNode(previousprimaryID, storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
 		print("Lost orders: ", lostOrders)
@@ -108,6 +110,8 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 			for i := 0; i < len(p.Lost); i++ {
 				//alle som dør
 				var lostOrders []network.Order
+
+				fmt.Print("********nodestatusmap", nodeStatusMap, "************")
 				storedOrders, lostOrders = distributeOrdersFromLostNode(p.Lost[i], storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
 				print("Lost orders: ", lostOrders)
 				for order := 0; order < len(lostOrders); order++ {

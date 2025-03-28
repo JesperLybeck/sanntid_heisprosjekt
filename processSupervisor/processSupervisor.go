@@ -20,11 +20,12 @@ func main() {
 	for {
 		select {
 		case <-aliveChannel:
-			aliveTimer.Reset(6 * time.Second)
+			aliveTimer.Reset(8 * time.Second)
 
 		case <-aliveTimer.C:
+
 			reviveProcess(port, nodeID, startingAsPrimaryEnv)
-			aliveTimer.Reset(6 * time.Second)
+			aliveTimer.Reset(8 * time.Second)
 		}
 	}
 }

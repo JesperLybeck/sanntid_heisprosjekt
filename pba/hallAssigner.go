@@ -4,6 +4,7 @@ import (
 	"Sanntid/elevator"
 	"Sanntid/network"
 	"Sanntid/networkDriver/peers"
+	"fmt"
 	"math"
 )
 
@@ -28,7 +29,8 @@ func argmin(arr []CostTuple) string {
 // indexOf function to find the index of the minimum value
 
 func AssignOrder(request network.Order, peerList peers.PeerUpdate, nodeStatus map[string]network.SingleElevatorStatus) string {
-
+	fmt.Print("||||", nodeStatus, "||||")
+	fmt.Print("||||", peerList, "||||")
 	for {
 		costs := make([]CostTuple, len(peerList.Peers)) // costs for each elevator
 		if request.ButtonEvent.Button == elevator.BT_Cab {
@@ -38,6 +40,7 @@ func AssignOrder(request network.Order, peerList peers.PeerUpdate, nodeStatus ma
 		for p := 0; p < len(peerList.Peers); p++ {
 			peerStatus := nodeStatus[peerList.Peers[p]]
 			costs[p].ID = peerList.Peers[p]
+
 			distanceCost := (peerStatus.PrevFloor - request.ButtonEvent.Floor) * (peerStatus.PrevFloor - request.ButtonEvent.Floor)
 			//Optional: add directional contribution to cost.
 

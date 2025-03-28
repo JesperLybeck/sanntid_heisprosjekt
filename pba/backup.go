@@ -2,6 +2,7 @@ package pba
 
 import (
 	"Sanntid/config"
+	"fmt"
 
 	"Sanntid/network"
 
@@ -20,12 +21,12 @@ func Backup(ID string, primaryElection <-chan network.Election, done chan<- netw
 	var latestPeerList peers.PeerUpdate
 	var primaryID string
 	var previousPrimaryID string
-	var nodeMap map[string]network.SingleElevatorStatus
+	var nodeMap = make(map[string]network.SingleElevatorStatus)
 	//var takeOverInProgress bool
 
 	go bcast.Receiver(13055, primaryStatusRX)
 	go peers.Receiver(12055, peerUpdateRX)
-	go bcast.Receiver(13056, nodeStatusUpdateRX)
+	go bcast.Receiver(13059, nodeStatusUpdateRX)
 	//print("i am backup")
 
 	for {
@@ -49,7 +50,7 @@ func Backup(ID string, primaryElection <-chan network.Election, done chan<- netw
 			nodeMap = UpdateNodeMap(n.ID, n, nodeMap)
 
 		case p := <-peerUpdateRX:
-
+			fmt.Print("~~~~~~~", p, "~~~~~~~")
 			latestPeerList = p
 			if primInPeersLost(primaryID, p) {
 

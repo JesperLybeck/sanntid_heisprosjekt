@@ -3,7 +3,7 @@ package elevator
 import (
 	"Sanntid/config"
 	//"Sanntid/network"
-	"fmt"
+
 	"time"
 )
 
@@ -71,11 +71,6 @@ func shouldStop(E Elevator) bool {
 
 }*/
 func shouldClearImmediately(E Elevator, btnEvent ButtonEvent) bool {
-	print("check 0------>", (E.Input.PrevFloor == btnEvent.Floor), "<----")
-	print("Check1---->", (E.Input.PrevFloor == btnEvent.Floor) && (E.Output.MotorDirection == MD_Up && btnEvent.Button == BT_HallUp), "<----")
-	print("Check2---->", (E.Output.MotorDirection == MD_Down && btnEvent.Button == BT_HallDown), "<----")
-	print("Check3---->", (E.Output.MotorDirection == MD_Stop), "----")
-	print("Check4---->", (btnEvent.Button == BT_Cab) && !(E.State == DoorOpen), "----")
 
 	return ((E.Input.PrevFloor == btnEvent.Floor) && ((E.Output.MotorDirection == MD_Up && btnEvent.Button == BT_HallUp) ||
 		(E.Output.MotorDirection == MD_Down && btnEvent.Button == BT_HallDown) ||
@@ -172,7 +167,7 @@ func chooseDirection(E Elevator) DirectionStatePair {
 
 		} else if OrdersBelow(E) {
 			if WasHallUp(E.Input.LastClearedButtons) {
-				print("-------------It was hall up, but we are are changing directions. Stopping 3 more second-------------")
+
 				return DirectionStatePair{MD_Stop, DoorOpen, true} //spesialcase ekstra dørtimer
 			} else {
 				return DirectionStatePair{MD_Down, MovingBetweenFloors, false}
@@ -188,7 +183,7 @@ func chooseDirection(E Elevator) DirectionStatePair {
 			return DirectionStatePair{MD_Stop, DoorOpen, false}
 		} else if OrdersAbove(E) {
 			if WasHallDown(E.Input.LastClearedButtons) {
-				print("---------------It was hall Down, but we are are changing directions. Stopping 3 more second-------------")
+
 				return DirectionStatePair{MD_Stop, DoorOpen, true} //spesialcase ekstra dørtimer
 			} else {
 				return DirectionStatePair{MD_Up, MovingBetweenFloors, false}
@@ -281,7 +276,7 @@ func LastClearedButtons(e Elevator, b Elevator) []ButtonEvent {
 }*/
 
 func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
-	
+
 	wasIdleAtNewOrder := E.State == Idle
 	nextElevator := E
 	nextElevator.Output.LocalOrders[order.Floor][order.Button] = true //legger inn den nye ordren.
@@ -291,10 +286,10 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 	switch nextElevator.State {
 
 	case DoorOpen:
-		print("!!!!case DoorOpen!!!!")
+
 		if shouldClearImmediately(nextElevator, order) {
 			//uten disse, vil heisen stå i 6 sekunder.
-			print("----------->>clearing immediatly<<-----")
+
 			model := nextElevator
 			nextElevator.Output.LocalOrders[order.Floor][order.Button] = false
 			nextElevator.Output.LocalOrders[order.Floor][BT_Cab] = false
@@ -305,14 +300,14 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 			nextElevator.DoorTimer.Reset(3 * time.Second)
 			nextElevator.ObstructionTimer.Reset(7 * time.Second)
 			nextElevator.OrderCompleteTimer.Reset(config.OrderTimeout * time.Second)
-			print("Clearing order immediately, resetting obstruction timer")
+
 			//her returnerer vi tomt, så prim som venter på ack, får aldri denne.
 
 			break
 		}
 
 	case Idle:
-		print("<<<case IDLE>>>>")
+
 		nextElevator.Output.prevMotorDirection = nextElevator.Output.MotorDirection
 		DirectionStatePair := chooseDirection(nextElevator)
 		if DirectionStatePair.State == DoorOpen {
@@ -321,9 +316,8 @@ func HandleNewOrder(order ButtonEvent, E Elevator) Elevator {
 			nextElevator.DoorTimer.Reset(3 * time.Second)
 			model := nextElevator
 			nextElevator = ClearAtFloor(nextElevator)
-			fmt.Println(nextElevator.Output.LocalOrders)
+
 			nextElevator.Input.LastClearedButtons = LastClearedButtons(model, nextElevator)
-			fmt.Println("----------",nextElevator.Input.LastClearedButtons,"--------------")
 
 		}
 
@@ -358,7 +352,7 @@ func HandleFloorReached(event int, E Elevator) Elevator {
 			nextElevator.Output.Door = true
 
 			nextElevator.DoorTimer.Reset(3 * time.Second)
-			fmt.Println("Resetting door timer")
+
 			nextElevator.ObstructionTimer.Reset(config.ObstructionTimeout * time.Second)
 
 			nextElevator.State = DoorOpen
@@ -400,7 +394,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		nextElevator.OrderCompleteTimer.Reset(config.OrderTimeout * time.Second)
 	}
 	if nextElevator.DoorObstructed {
-		print("Door obstructed")
+
 		nextElevator.Output.Door = true
 		nextElevator.State = DoorOpen
 		nextElevator.Output.MotorDirection = MD_Stop
@@ -408,7 +402,7 @@ func HandleDoorTimeout(E Elevator) Elevator {
 		nextElevator.OrderCompleteTimer.Reset(config.OrderTimeout * time.Second)
 
 	} else {
-		fmt.Println("Door timer stopped")
+
 		nextElevator.ObstructionTimer.Stop()
 		if extraTime {
 			nextElevator.Output.Door = true
