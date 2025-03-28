@@ -2,7 +2,6 @@ package pba
 
 import (
 	"Sanntid/config"
-	"fmt"
 
 	"Sanntid/network"
 
@@ -50,7 +49,7 @@ func Backup(ID string, primaryElection <-chan network.Election, done chan<- netw
 			nodeMap = UpdateNodeMap(n.ID, n, nodeMap)
 
 		case p := <-peerUpdateRX:
-			fmt.Print("~~~~~~~", p, "~~~~~~~")
+
 			latestPeerList = p
 			if primInPeersLost(primaryID, p) {
 

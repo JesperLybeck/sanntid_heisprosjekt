@@ -117,9 +117,9 @@ func main() {
 			time.Sleep(100 * time.Millisecond)
 		}
 	} else {
-	E.ObstructionTimer.Stop()
-}
-	
+		E.ObstructionTimer.Stop()
+	}
+
 	E.OrderCompleteTimer.Stop()
 	//-----------------------------GO ROUTINES-----------------------------
 	go pba.RoleElection(ID, primaryMerge)
@@ -202,9 +202,10 @@ func main() {
 				Orders:      E.Input.LocalRequests,
 				RequestID:   NumRequests,
 			}
-			// ISSUE! when the order is delegated to a different node, we cant ack on
 
-			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, NumRequests, config.IDToIndexMap)
+			// ISSUE! when the order is delegated to a different node, we cant ack on
+			context := "called by buttonPress by " + string(ID)
+			go network.SendRequestUpdate(RequestToPrimTX, requestToPrimary, config.IDToIndexMap, context)
 			NumRequests++
 
 			if aloneOnNetwork && btnEvent.Button == elevator.BT_Cab {
@@ -247,6 +248,8 @@ func main() {
 
 		case <-E.DoorTimer.C:
 
+			print("door timer expired")
+
 			E.DoorObstructed = elevator.GetObstruction()
 
 			E = elevator.HandleDoorTimeout(E)
@@ -256,12 +259,13 @@ func main() {
 			E.OrderCompleteTimer.Stop()
 
 			for i := 0; i < len(E.Input.LastClearedButtons); i++ {
-				orderMessage := network.Request{ButtonEvent: E.Input.LastClearedButtons[0],
-					ID:        ID,
-					Orders:    E.Output.LocalOrders,
-					RequestID: NumRequests}
-
-				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, NumRequests, config.IDToIndexMap)
+				orderMessage := network.Request{
+					ButtonEvent: E.Input.LastClearedButtons[0],
+					ID:          ID,
+					Orders:      E.Output.LocalOrders,
+					RequestID:   NumRequests}
+				contect := "called by doorTimer by " + string(ID)
+				go network.SendRequestUpdate(OrderCompletedTX, orderMessage, config.IDToIndexMap, contect)
 				NumRequests++
 				E.Input.LastClearedButtons = RemoveClearedOrder(E.Input.LastClearedButtons, E.Input.LastClearedButtons[0])
 			}
@@ -273,7 +277,7 @@ func main() {
 
 			panic("Node failed to complete order, door obstruction")
 		case <-statusTicker.C:
-			
+
 			nodeStatusTX <- network.SingleElevatorStatus{ID: ID, PrevFloor: E.Input.PrevFloor, MotorDirection: E.Output.MotorDirection, Orders: E.Output.LocalOrders}
 
 		}

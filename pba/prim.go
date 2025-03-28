@@ -19,7 +19,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 	previousprimaryID := initialState.PreviousPrimaryID
 
 	takeOverInProgress := initialState.TakeOverInProgress
-	print(takeOverInProgress)
+
 	latestPeerList := initialState.Peerlist
 
 	//TODO, PASS CHANNELS I GOROUTINES
@@ -50,12 +50,11 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 
 	if takeOverInProgress {
 		//do stuff
-		fmt.Println("Takeover in progress")
+
 		var lostOrders []network.Order
 		storedOrders, lostOrders = distributeOrdersFromLostNode(previousprimaryID, storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
-		print("Lost orders: ", lostOrders)
 		for order := 0; order < len(lostOrders); order++ {
-			go network.SendOrder(orderTX, nodeStatusRX, lostOrders[order], id, OrderNumber, requestRX, nodeStatusMap)
+			go network.SendOrder(orderTX, nodeStatusRX, lostOrders[order], previousprimaryID, OrderNumber, requestRX, nodeStatusMap)
 			OrderNumber++
 		}
 
@@ -85,6 +84,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 				index, exists := getOrAssignIndex(p.New, config.IDToIndexMap)
 
 				if exists {
+					print("welcome back", p.New, "||||||||")
 					// Retrieve CAB calls.
 					// kanskje vi kan lage en "fake" new order? Eventuelt om vi bør endre single elevator til å ikke være event basert, men heller "while requests in queue"
 					//Hvis vi finner at det er lagret cab calls for denne heisen som ikke er gjort her i remote, så trigger vi en ny ordre .
@@ -96,7 +96,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 								ResponisbleElevator: p.New,
 								OrderID:             OrderNumber,
 							}
-
+							fmt.Print("retrieved cabcall,", newOrder, "----->")
 							go network.SendOrder(orderTX, nodeStatusRX, newOrder, searchMap(index, config.IDToIndexMap), OrderNumber, requestRX, nodeStatusMap)
 
 							OrderNumber++
@@ -111,9 +111,8 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 				//alle som dør
 				var lostOrders []network.Order
 
-				fmt.Print("********nodestatusmap", nodeStatusMap, "************")
 				storedOrders, lostOrders = distributeOrdersFromLostNode(p.Lost[i], storedOrders, config.IDToIndexMap, nodeStatusMap, latestPeerList)
-				print("Lost orders: ", lostOrders)
+
 				for order := 0; order < len(lostOrders); order++ {
 					go network.SendOrder(orderTX, nodeStatusRX, lostOrders[order], id, OrderNumber, requestRX, nodeStatusMap)
 					OrderNumber++
@@ -162,9 +161,15 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 
 				continue
 			}
+			print("Cab call received from:", a.ID, "<-----")
 			order := network.Order{ButtonEvent: a.ButtonEvent, ResponisbleElevator: a.ID, OrderID: OrderNumber}
 
 			responsibleElevator := AssignOrder(order, latestPeerList, nodeStatusMap)
+			if a.ButtonEvent.Button == elevator.BT_Cab {
+				print("Cab call received from:", a.ID, "<-----")
+
+				print("giving order to:", responsibleElevator, "----->")
+			}
 
 			order.ResponisbleElevator = responsibleElevator
 
@@ -177,7 +182,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 
 			//vi bør kanskje forsikre oss om at backup har lagret dette. Mulig vi må kreve ack fra backup, da vi bruker dette som knappelys garanti.
 
-			go network.SendOrder(orderTX, nodeStatusRX, newMessage, id, OrderNumber, requestRX, nodeStatusMap)
+			go network.SendOrder(orderTX, nodeStatusRX, newMessage, a.ID, OrderNumber, requestRX, nodeStatusMap)
 
 			OrderNumber++
 			lastMessagesMap[a.ID] = a.RequestID
@@ -185,7 +190,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 		case a := <-RXFloorReached:
 
 			lastMessageNumber, _ := getOrAssignMessageNumber(a.ID, lastMessagesMap)
-			print("received order completed")
+
 			if lastMessageNumber == a.RequestID {
 
 				continue
@@ -195,7 +200,7 @@ func Primary(id string, primaryElection <-chan network.Election, initialState ne
 				index, _ := getOrAssignIndex(a.ID, config.IDToIndexMap) //kan bli -1 hvis vi ikke er i mappet.
 
 				storedOrders = updateOrders(a.Orders, index, storedOrders)
-				fmt.Println(storedOrders)
+
 				lastMessagesMap[a.ID] = a.RequestID
 			}
 

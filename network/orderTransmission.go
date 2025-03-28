@@ -4,14 +4,15 @@ import (
 	"Sanntid/config"
 	"Sanntid/elevator"
 	"Sanntid/networkDriver/bcast"
+	"fmt"
 
 	"strconv"
 	"time"
 )
 
-func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestID int, idToIndexMap map[string]int) {
-
-	primStatusRX := make(chan Status)
+func SendRequestUpdate(transmitterChan chan<- Request, message Request, idToIndexMap map[string]int, description string) {
+	fmt.Print("|||||||||||||||||||||||", description, message.ID, "|||||||||||||")
+	primStatusRX := make(chan Status) // Create a channel for receiving status
 	go bcast.Receiver(13055, primStatusRX)
 
 	sendingTicker := time.NewTicker(30 * time.Millisecond)
@@ -24,6 +25,9 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 	messagesSent := 0
 
 	print("---------Sending request update---------")
+	if message.ButtonEvent.Button == elevator.BT_Cab {
+		print("----->sending cab requsest", message.ID, "<------")
+	}
 
 	for {
 		select {
@@ -31,6 +35,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 
 			transmitterChan <- message
 			messagesSent++
+			print(message.ID)
 
 		case status := <-primStatusRX: //kan dette skje på samme melding?
 
@@ -38,7 +43,7 @@ func SendRequestUpdate(transmitterChan chan<- Request, message Request, requestI
 			button := message.ButtonEvent.Button
 			//print("ID: ", message.ID, "index: ", IpToIndexMap[message.ID])
 			j := idToIndexMap[message.ID]
-			print("--------j: ", j, "----id, ", message.ID, "<------")
+
 			if button == elevator.BT_Cab {
 				if (status.Orders[j][floor][button] == message.Orders[floor][button]) && messagesSent > 0 {
 					print("--------- Request acked ---------")
@@ -70,6 +75,7 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 	defer sendingTicker.Stop()
 	messagesSent := 0
 	// er vi nødt til å acke ordre gitt i etasje vi allerede er i?
+
 	for {
 		select {
 		case <-sendingTicker.C:
@@ -84,6 +90,7 @@ func SendOrder(transmitterChan chan<- Order, ackChan <-chan SingleElevatorStatus
 			}
 		case <-messageTimer.C:
 			RequestID := message.OrderID
+
 			Reassign := Request{ID: ID, ButtonEvent: message.ButtonEvent, Orders: nodeStatusMap[ID].Orders, RequestID: RequestID}
 			ResendChan <- Reassign
 			return
