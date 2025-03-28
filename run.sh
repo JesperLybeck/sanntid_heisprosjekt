@@ -4,10 +4,8 @@
 
 # Set the variables
 nodeID="111"
-PORT=16000
-
+PORT=15657 # to use hardware set as 15657
 STARTASPRIM=true
-
 LASTNUMBER=${PORT: -1}
 go build -o "elevator_${LASTNUMBER}" main.go
 
@@ -21,15 +19,15 @@ fi
 # Function to start SimElevatorServer
 start_sim_elevator_server() {
     echo "Starting SimElevatorServer..."
-    gnome-terminal -- bash -c "simelevatorserver --port=$PORT; exec bash" &
-    #gnome-terminal -- bash -c "elevatorserver; exec bash" &
+    #gnome-terminal -- bash -c "simelevatorserver --port=$PORT; exec bash" &
+    gnome-terminal -- bash -c "elevatorserver; exec bash" &
 }
 
 # Function to start processSupervisor
 start_process_supervisor() {
     echo "Starting processSupervisor..."
     gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
-    #gnome-terminal -- bash -c "env ID=$nodeID PORT=$PORT STARTASPRIM=$STARTASPRIM go run processSupervisor/processSupervisor.go; exec bash" &
+    
 }
 
 # Start the SimElevatorServer

@@ -6,7 +6,6 @@ const NFloors int = 4
 const NButtons int = 3
 const MElevators int = 3
 
-// timer constants //Her må vi sette alle timere konstantene for hele systemet.
 const OrderTimeout time.Duration = 5
 const DoorTimeout time.Duration = 3
 const ObstructionTimeout time.Duration = 7

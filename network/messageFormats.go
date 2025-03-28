@@ -14,7 +14,13 @@ type Status struct {
 	AloneOnNetwork     bool
 	TakeOverInProgress bool
 }
-
+type SingleElevatorStatus struct {
+	ID             string
+	PrevFloor      int
+	MotorDirection elevator.MotorDirection
+	Orders         [config.NFloors][config.NButtons]bool
+	StatusID       int
+}
 type Takeover struct {
 	StoredOrders       [config.MElevators][config.NFloors][config.NButtons]bool
 	PreviousPrimaryID  string
@@ -22,7 +28,6 @@ type Takeover struct {
 	NodeMap            map[string]SingleElevatorStatus
 	TakeOverInProgress bool
 }
-
 type Election struct {
 	PrimaryID    string
 	MergedOrders [config.MElevators][config.NFloors][config.NButtons]bool
@@ -33,19 +38,10 @@ type Request struct {
 	Orders      [config.NFloors][config.NButtons]bool
 	RequestID   int
 }
-
 type Order struct {
 	ButtonEvent         elevator.ButtonEvent
 	ResponisbleElevator string
 	OrderID             int
-}
-
-type SingleElevatorStatus struct {
-	ID             string
-	PrevFloor      int
-	MotorDirection elevator.MotorDirection
-	Orders         [config.NFloors][config.NButtons]bool
-	StatusID       int
 }
 
 type LightUpdate struct {

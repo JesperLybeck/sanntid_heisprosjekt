@@ -14,6 +14,12 @@ const (
 	DoorOpen
 )
 
+type ElevatorInput struct {
+	LocalRequests      [config.NFloors][config.NButtons]bool
+	PrevFloor          int
+	LastClearedButtons []ButtonEvent
+}
+
 type ElevatorOutput struct {
 	MotorDirection     MotorDirection
 	prevMotorDirection MotorDirection
@@ -21,11 +27,6 @@ type ElevatorOutput struct {
 	LocalOrders        [config.NFloors][config.NButtons]bool
 }
 
-type ElevatorInput struct {
-	LocalRequests      [config.NFloors][config.NButtons]bool
-	PrevFloor          int
-	LastClearedButtons []ButtonEvent
-}
 type Elevator struct {
 	State              ElevatorState
 	Input              ElevatorInput
