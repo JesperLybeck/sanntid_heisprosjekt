@@ -49,7 +49,7 @@ func main() {
 
 	elevator.Init("localhost:"+elevatorPortNumber, config.NFloors)
 	initializeElevator(E)
-	E.State = elevator.Idle
+	E.State = elevator.DoorOpen
 	E.Input.LocalRequests = [config.NFloors][config.NButtons]bool{}
 	E.Output.LocalOrders = [config.NFloors][config.NButtons]bool{}
 	E.Input.PrevFloor = elevator.GetFloor()

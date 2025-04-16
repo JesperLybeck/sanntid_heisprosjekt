@@ -1,7 +1,7 @@
-# Distributed elevators system
+# Distributed elevator system
 
 ## Overview
-This project is an distributed elevator system implemented in Go. It follows a modular design to manage M elevators and their operations, networking, process supervision.
+This project is an distributed elevator system with heavy emphasis on fault tolerance. The project is Implemented in Go. It follows a modular design to manage M elevators and their operations, networking, process supervision.
 
 ## Project Structure
 Below is an overview of the key modules in this project:
@@ -11,7 +11,7 @@ Below is an overview of the key modules in this project:
 - **network**: Manages communication between each module.
 - **networkDriver**: Low-level networking functionalities using UDP.
 - **pba**: Primary and backup assignment for each eleveator 
-- **processSupervisor**: Monitors and manages system processes to ensure fault tolerance.
+- **processSupervisor**: Monitors and manages system processes.
 
 ## How to run the program
 Edit the run.sh file with the environment variables PORT, ID and STARTASPRIM. 
