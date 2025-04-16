@@ -1,7 +1,7 @@
 # Distributed elevator system
 
 ## Overview
-This project is an distributed elevator system with heavy emphasis on fault tolerance. The project is Implemented in Go. It follows a modular design to manage M elevators and their operations, networking, process supervision.
+This project is an distributed elevator system with a heavy emphasis on fault tolerance. The project is Implemented in Go. It follows a modular design to manage M elevator operating N floors.
 
 ## Project Structure
 Below is an overview of the key modules in this project:
